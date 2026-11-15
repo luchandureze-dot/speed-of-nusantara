@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speed of Nusantara - Prototipe</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+
+    <div id="dashboard">
+        <div class="stat">Skor Jarak: <span id="score">0</span> m</div>
+        <div class="stat stat-best">Rekor: <span id="best-score">0</span> m</div>
+        <div id="near-miss-toast" hidden>+25 m SALIP TIPIS!</div>
+        <div id="speedometer">
+            <div id="speed-value">0</div>
+            <div id="speed-unit">KM/H</div>
+            <div id="engine-readout">RPM <span id="rpm-value">1000</span> · <span id="gear-label">GIGI</span> <span id="gear-value">1</span></div>
+        </div>
+    </div>
+
+    <div id="controls-hint" hidden>
+        <b>W / Panah Atas:</b> Gas<br>
+        <b>S / Panah Bawah:</b> Rem / Mundur<br>
+        <b>A D / Panah Kiri Kanan:</b> Belok / Pindah Lajur<br>
+        <b>C:</b> Ganti Kamera<br>
+        <b>Klik kiri + drag:</b> Putar Kamera (lepas untuk kembali netral)<br>
+        <b>Scroll:</b> Zoom In / Out
+    </div>
+    <div id="hud-actions">
+        <button id="controls-toggle" type="button" aria-controls="controls-hint"
+                aria-expanded="false" aria-label="Tampilkan petunjuk kontrol">i</button>
+        <button id="audio-toggle" type="button" aria-pressed="false"
+                aria-label="Bisukan suara">🔊</button>
+    </div>
+
+    <div id="touch-controls" aria-label="Kontrol sentuh">
+        <div class="touch-cluster touch-steer">
+            <button id="touch-left" class="touch-btn" type="button" aria-label="Belok kiri">◀</button>
+            <button id="touch-right" class="touch-btn" type="button" aria-label="Belok kanan">▶</button>
+        </div>
+        <div class="touch-cluster touch-pedals">
+            <button id="touch-camera" class="touch-btn touch-btn-small" type="button" aria-label="Ganti kamera">CAM</button>
+            <button id="touch-brake" class="touch-btn touch-btn-brake" type="button" aria-label="Rem atau mundur">REM</button>
+            <button id="touch-gas" class="touch-btn touch-btn-gas" type="button" aria-label="Gas">GAS</button>
+        </div>
+    </div>
+
+    <div id="game-over">
+        <h2>KECELAKAAN!</h2>
+        <p>Kamu menabrak kendaraan lain di Tol Dalam Kota.</p>
+        <p id="new-record-badge" hidden>REKOR BARU!</p>
+        <p>Total Skor: <span id="final-score">0</span> meter</p>
+        <p class="final-best">Rekor Terbaik: <span id="final-best-score">0</span> meter</p>
+        <button class="btn" onclick="restartGame()">MAIN LAGI</button>
+    </div>
+
+    <div id="loading-screen" role="status" aria-live="polite" aria-busy="true">
+        <div class="loading-card">
+            <img class="game-logo" src="assets/speed-of-nusantara-logo.png" alt="Speed of Nusantara">
+            <div class="loading-ring" role="progressbar" aria-label="Progres pemuatan"
+                 aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <svg viewBox="0 0 100 100" aria-hidden="true">
+                    <circle class="loading-ring-track" cx="50" cy="50" r="44"></circle>
+                    <circle id="loading-ring-progress" cx="50" cy="50" r="44"></circle>
+                </svg>
+                <span id="loading-percent">0%</span>
+            </div>
+            <p id="loading-message">Memuat aset dan data...</p>
+            <button id="loading-start" class="start-prompt" type="button" hidden>click anything to start</button>
+            <button id="loading-retry" class="btn" type="button" hidden>COBA LAGI</button>
+        </div>
+    </div>
+
+    <section id="vehicle-selection" aria-label="Pilih kendaraan" hidden>
+        <div class="selection-brand">
+            <img src="assets/speed-of-nusantara-logo.png" alt="Speed of Nusantara">
+        </div>
+        <div class="vehicle-preview-copy">
+            <span class="eyebrow">PILIH KENDARAANMU</span>
+            <h1 id="selected-vehicle-name">Innova Zenix</h1>
+            <p class="vehicle-note">Geser untuk memutar · pilih kendaraan untuk melihat dari semua sisi</p>
+            <div class="color-options" role="group" aria-label="Warna kendaraan">
+                <button class="color-swatch" type="button" data-color="#cc0000" aria-label="Merah" aria-pressed="true" style="background:#cc0000"></button>
+                <button class="color-swatch" type="button" data-color="#1769aa" aria-label="Biru" aria-pressed="false" style="background:#1769aa"></button>
+                <button class="color-swatch" type="button" data-color="#eeeeea" aria-label="Putih" aria-pressed="false" style="background:#eeeeea"></button>
+                <button class="color-swatch" type="button" data-color="#292d33" aria-label="Hitam" aria-pressed="false" style="background:#292d33"></button>
+                <button class="color-swatch" type="button" data-color="#e4ad20" aria-label="Kuning" aria-pressed="false" style="background:#e4ad20"></button>
+            </div>
+            <button id="choose-vehicle" class="btn" type="button">PILIH KENDARAAN</button>
+        </div>
+        <button id="previous-vehicle" class="vehicle-arrow" type="button" aria-label="Kendaraan sebelumnya">‹</button>
+        <button id="next-vehicle" class="vehicle-arrow" type="button" aria-label="Kendaraan berikutnya">›</button>
+        <div class="vehicle-pagination" aria-hidden="true"><span id="vehicle-page">01 / 02</span></div>
+    </section>
+
+    <dialog id="plate-dialog" aria-labelledby="plate-title">
+        <form id="setup-form">
+            <span class="eyebrow">SATU LANGKAH LAGI</span>
+            <h2 id="plate-title">Personalisasi kendaraanmu</h2>
+            <p class="intro">Nama ini akan tampil di plat nomor kendaraan.</p>
+            <label class="field-label" for="player-name">Nama untuk plat nomor</label>
+            <input id="player-name" name="playerName" type="text" maxlength="12"
+                   placeholder="Contoh: ARIEL" autocomplete="nickname" required>
+            <p id="start-error" role="alert" hidden></p>
+            <button id="start-button" class="btn" type="submit">START SPEEDING</button>
+            <button id="back-to-selection" class="text-button" type="button">KEMBALI PILIH KENDARAAN</button>
+        </form>
+    </dialog>
+
+    <!-- Memuat Three.js lewat CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/ColladaLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/BufferGeometryUtils.js"></script>
+    <script src="js/state.js"></script>
+    <script src="js/audio.js"></script>
+    <script src="js/world.js"></script>
+    <script src="js/vehicle.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/traffic.js"></script>
+    <script src="js/input.js"></script>
+    <script src="js/physics.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

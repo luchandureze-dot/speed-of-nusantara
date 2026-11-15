@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Annotator Roda - Speed of Nusantara</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            font-family: "Segoe UI", sans-serif;
+            background: #101214;
+            color: #eee;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; min-width: 760px; height: 100vh; display: flex; flex-direction: column; }
+        header { padding: 14px 20px; border-bottom: 1px solid #34383c; display: flex; gap: 16px; align-items: center; }
+        header h1 { margin: 0; font-size: 18px; }
+        header label { margin-left: auto; }
+        select, button, .file-button { font: inherit; color: inherit; background: #252a2e; border: 1px solid #4a5158; border-radius: 5px; padding: 7px 10px; }
+        button { cursor: pointer; }
+        .file-button { display: block; margin-top: 8px; text-align: center; cursor: pointer; font-size: 13px; }
+        button:hover:not(:disabled) { background: #343c42; }
+        button:disabled { opacity: .5; cursor: not-allowed; }
+        main { min-height: 0; flex: 1; display: grid; grid-template-columns: minmax(240px, 300px) 1fr minmax(240px, 300px); }
+        aside { min-height: 0; overflow: auto; padding: 16px; background: #191c1f; }
+        aside:first-child { border-right: 1px solid #34383c; }
+        aside:last-child { border-left: 1px solid #34383c; }
+        h2 { font-size: 14px; margin: 0 0 12px; }
+        p { color: #b7bec4; font-size: 13px; line-height: 1.45; }
+        #viewport { min-height: 0; position: relative; }
+        #viewport canvas { display: block; width: 100%; height: 100%; }
+        #selection-rect { position: absolute; z-index: 1; border: 1px solid #45d483; background: rgb(69 212 131 / 18%); pointer-events: none; }
+        #viewport-help { position: absolute; bottom: 12px; left: 12px; color: #c5cbd0; font-size: 12px; pointer-events: none; text-shadow: 0 1px 3px #000; }
+        #status { border-top: 1px solid #34383c; min-height: 34px; padding: 8px 14px; color: #c5cbd0; font-size: 12px; }
+        #status[data-error="true"] { color: #ff9a8d; }
+        #tree { list-style: none; padding: 0; margin: 0; font-size: 12px; }
+        #tree ul { list-style: none; padding-left: 12px; margin: 0; }
+        #tree button, #tree summary { display: block; width: 100%; border: 0; padding: 5px 6px; background: transparent; text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; }
+        #tree summary { list-style-position: inside; }
+        #tree button.selected, #tree summary.selected { background: #34434c; }
+        #tree button.assigned, #tree summary.assigned { color: #82d8ff; }
+        .node-kind { color: #84919a; font-size: 10px; }
+        .role-row { margin: 10px 0; padding: 9px; border: 1px solid #3b4248; border-radius: 6px; }
+        .role-row strong { display: block; margin-bottom: 3px; font-size: 13px; }
+        .role-row span { color: #aeb8bf; font-size: 12px; }
+        #selection-name { min-height: 34px; overflow-wrap: anywhere; color: #b7bec4; font-size: 12px; }
+        #assignment { width: 100%; margin: 8px 0; }
+        #assign-button, #area-select-button, #isolate-button, #export-button { width: 100%; margin-top: 8px; }
+        #area-select-button[aria-pressed="true"] { background: #27563d; border-color: #45d483; }
+        #export-button { background: #8b5a00; border-color: #ba7900; font-weight: 600; }
+        #export-button:hover:not(:disabled) { background: #a86e00; }
+        .muted { color: #9da6ac; }
+        @media (max-width: 920px) {
+            main { grid-template-columns: 220px 1fr 240px; }
+            aside { padding: 11px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Annotator bagian roda</h1>
+        <label for="model-select">Aset:</label>
+        <select id="model-select">
+            <option value="car">Toyota Innova Zenix</option>
+            <option value="motorcycle">Yamaha NMAX Neo</option>
+        </select>
+        <button id="load-button" type="button">Muat ulang</button>
+    </header>
+    <main>
+        <aside>
+            <h2>Hierarki model</h2>
+            <p>Pilih group atau objek untuk mengisolasinya. Saat isolasi aktif, gunakan <b>Pilih area</b> lalu drag untuk memilih satu atau beberapa mesh yang terlihat; bagian lain tetap tersembunyi dan tidak ikut terpilih. Gunakan <b>Tampilkan seluruh mobil</b> hanya jika ingin kembali ke konteks model penuh.</p>
+            <p>Gunakan pohon untuk membuka grup dan memilih mesh satu per satu. Jangan tandai grup jika isinya mencakup bagian bodi atau bagian lain.</p>
+            <ul id="tree"></ul>
+        </aside>
+        <section id="viewport" aria-label="Pratinjau model 3D">
+            <div id="selection-rect" hidden></div>
+            <div id="viewport-help">Drag: orbit · Scroll: zoom · Klik objek: pilih</div>
+        </section>
+        <aside>
+            <h2>Bagian terpilih</h2>
+            <div id="selection-name">Belum ada objek dipilih.</div>
+            <label for="assignment">Tandai sebagai:</label>
+            <select id="assignment"></select>
+            <button id="assign-button" type="button" disabled>Terapkan ke pilihan</button>
+            <button id="area-select-button" type="button" aria-pressed="false">Pilih area</button>
+            <button id="isolate-button" type="button" disabled>Isolasi pilihan</button>
+            <h2 style="margin-top:22px">Penetapan roda</h2>
+            <div id="role-summary"></div>
+            <button id="preview-button" type="button" disabled>Pratinjau putaran roda</button>
+            <button id="export-button" type="button" disabled>Unduh konfigurasi JSON</button>
+            <label class="file-button" for="config-file">Muat konfigurasi JSON</label>
+            <input id="config-file" type="file" accept=".json,application/json" hidden>
+            <p class="muted">Simpan file yang diunduh sebagai <code>wheel-annotations.json</code> di folder aset kendaraan. Titik putar tetap memakai posisi mount fisika yang sudah ada.</p>
+        </aside>
+    </main>
+    <div id="status" role="status">Memuat Three.js...</div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/ColladaLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="wheel-annotator.js"></script>
+</body>
+</html>

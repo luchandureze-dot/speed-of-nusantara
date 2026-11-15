@@ -1,0 +1,616 @@
+        @font-face {
+            font-family: 'Broken15';
+            src: url('../assets/fonts/BROKEN15.TTF') format('truetype');
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Brokw';
+            src: url('../assets/fonts/brokw___.ttf') format('truetype');
+            font-display: swap;
+        }
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Brokw', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #050505;
+            user-select: none;
+        }
+        #dashboard {
+            position: absolute;
+            right: 30px;
+            bottom: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            pointer-events: none;
+            font-family: 'Broken15', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .stat {
+            font-size: 18px;
+            margin-bottom: 8px;
+            text-align: right;
+        }
+        #speedometer {
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid #ffcc00;
+            padding: 15px 25px;
+            border-radius: 10px;
+            color: white;
+            text-align: center;
+            pointer-events: none;
+            box-shadow: 0 0 20px rgba(255, 204, 0, 0.3);
+        }
+        #speed-value {
+            font-size: 42px;
+            font-weight: bold;
+            color: #ffcc00;
+        }
+        #speed-unit {
+            font-size: 14px;
+            color: #aaa;
+        }
+        #engine-readout {
+            margin-top: 5px;
+            color: #ddd;
+            font-size: 12px;
+        }
+        .stat-best {
+            font-size: 14px;
+            color: #cfd5df;
+            margin-bottom: 10px;
+        }
+        #near-miss-toast {
+            margin-bottom: 10px;
+            padding: 6px 12px;
+            border: 1px solid #ffcc00;
+            border-radius: 6px;
+            background: rgba(255, 204, 0, 0.2);
+            color: #ffe37a;
+            font-size: 14px;
+            letter-spacing: 0.05em;
+        }
+        #controls-hint {
+            position: absolute;
+            bottom: 70px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.78);
+            padding: 10px 15px;
+            border-radius: 8px;
+            color: #ddd;
+            font-size: 13px;
+            pointer-events: none;
+            line-height: 1.5;
+            border: 1px solid #444;
+        }
+        #hud-actions {
+            position: absolute;
+            left: 20px;
+            bottom: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 5;
+        }
+        #controls-toggle,
+        #audio-toggle {
+            width: 38px;
+            height: 38px;
+            border: 1px solid #ffcc00;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.75);
+            color: #ffcc00;
+            font: inherit;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            display: grid;
+            place-items: center;
+        }
+        #controls-toggle:hover,
+        #controls-toggle:focus-visible,
+        #audio-toggle:hover,
+        #audio-toggle:focus-visible {
+            background: #ffcc00;
+            color: #111;
+        }
+        #new-record-badge {
+            display: inline-block;
+            margin: 6px 0 4px;
+            padding: 4px 12px;
+            border-radius: 999px;
+            background: #ffcc00;
+            color: #111;
+            font-size: 13px;
+            font-weight: bold;
+            letter-spacing: 0.08em;
+        }
+        .final-best {
+            color: #c4c8d0;
+            font-size: 14px;
+        }
+        #touch-controls {
+            display: none;
+            position: fixed;
+            inset: auto 16px 72px 16px;
+            justify-content: space-between;
+            align-items: flex-end;
+            pointer-events: none;
+            z-index: 6;
+        }
+        .touch-cluster {
+            display: flex;
+            gap: 10px;
+            pointer-events: auto;
+        }
+        .touch-btn {
+            min-width: 58px;
+            height: 58px;
+            border: 1px solid rgba(255, 204, 0, 0.65);
+            border-radius: 12px;
+            background: rgba(12, 14, 20, 0.65);
+            color: #fff;
+            font: inherit;
+            font-size: 15px;
+            font-weight: bold;
+            touch-action: none;
+            user-select: none;
+            cursor: pointer;
+        }
+        .touch-btn-small {
+            min-width: 50px;
+            font-size: 12px;
+            border-color: rgba(255, 255, 255, 0.45);
+        }
+        .touch-btn-brake {
+            border-color: rgba(255, 92, 92, 0.75);
+        }
+        .touch-btn.is-active {
+            background: rgba(255, 204, 0, 0.85);
+            color: #111;
+        }
+        @media (pointer: coarse), (max-width: 768px) {
+            body.game-active #touch-controls {
+                display: flex;
+            }
+            #dashboard {
+                right: 16px;
+                top: 16px;
+                bottom: auto;
+            }
+            #speedometer {
+                padding: 10px 16px;
+            }
+            #speed-value {
+                font-size: 30px;
+            }
+        }
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(20, 20, 20, 0.95);
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            color: white;
+            display: none;
+            border: 2px solid #ff4444;
+            box-shadow: 0 0 30px rgba(255, 68, 68, 0.5);
+        }
+        #game-over h2 {
+            margin-top: 0;
+            color: #ff4444;
+            font-size: 32px;
+        }
+        .btn {
+            background: #ffcc00;
+            color: #111;
+            border: none;
+            padding: 12px 25px;
+            font-size: 16px;
+            font-family: inherit;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: 0.2s;
+        }
+        .btn:hover {
+            background: #ffaa00;
+            transform: scale(1.05);
+        }
+        #start-menu {
+            position: fixed;
+            inset: 0;
+            z-index: 10;
+            display: grid;
+            place-items: center;
+            padding: 18px;
+            background: rgba(5, 6, 12, 0.82);
+            backdrop-filter: blur(7px);
+        }
+        #setup-form {
+            width: min(460px, 100%);
+            padding: 28px;
+            border: 1px solid rgba(255, 204, 0, 0.55);
+            border-radius: 14px;
+            background: rgba(17, 19, 28, 0.97);
+            color: #eee;
+            box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+            user-select: text;
+        }
+        #setup-form h2 {
+            margin: 0;
+            color: #ffcc00;
+            font-size: 24px;
+            letter-spacing: 1px;
+        }
+        #setup-form .intro {
+            margin: 6px 0 22px;
+            color: #b6bbc3;
+            font-size: 13px;
+        }
+        #setup-form .field-label {
+            display: block;
+            margin: 16px 0 7px;
+            color: #f0f0f0;
+            font-size: 13px;
+            font-weight: 700;
+        }
+        #player-name {
+            width: 100%;
+            padding: 11px 12px;
+            border: 1px solid #51535b;
+            border-radius: 7px;
+            outline: none;
+            background: #0c0e14;
+            color: white;
+            font: inherit;
+            font-size: 15px;
+            text-transform: uppercase;
+        }
+        #player-name:focus { border-color: #ffcc00; }
+        .vehicle-options, .color-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 9px;
+        }
+        .vehicle-option {
+            flex: 1;
+            min-width: 120px;
+            cursor: pointer;
+        }
+        .vehicle-option input {
+            position: absolute;
+            opacity: 0;
+        }
+        .vehicle-option span {
+            display: block;
+            padding: 12px;
+            border: 1px solid #454851;
+            border-radius: 8px;
+            background: #11141c;
+            color: #d7d9de;
+            text-align: center;
+            font-size: 14px;
+        }
+        .vehicle-option input:checked + span {
+            border-color: #ffcc00;
+            background: #312a12;
+            color: #ffdf71;
+        }
+        .vehicle-note {
+            margin: 8px 0 0;
+            color: #aeb3bd;
+            font-size: 12px;
+        }
+        .color-swatch {
+            width: 35px;
+            height: 35px;
+            padding: 0;
+            border: 2px solid rgba(255,255,255,.25);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        .color-swatch[aria-pressed="true"] {
+            outline: 2px solid #ffcc00;
+            outline-offset: 3px;
+        }
+        #start-button {
+            width: 100%;
+            margin-top: 23px;
+        }
+        #loading-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 20;
+            display: none;
+            place-items: center;
+            padding: 18px;
+            background: rgba(5, 6, 12, 0.9);
+            backdrop-filter: blur(7px);
+        }
+        .loading-card {
+            width: min(380px, 100%);
+            padding: 30px;
+            border: 1px solid rgba(255, 204, 0, 0.55);
+            border-radius: 14px;
+            background: #11131c;
+            color: #eee;
+            text-align: center;
+            box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+        }
+        .loading-spinner {
+            width: 42px;
+            height: 42px;
+            margin: 0 auto 18px;
+            border: 4px solid rgba(255, 204, 0, 0.22);
+            border-top-color: #ffcc00;
+            border-radius: 50%;
+            animation: loading-spin 0.8s linear infinite;
+        }
+        @keyframes loading-spin {
+            to { transform: rotate(360deg); }
+        }
+        .loading-card h2 {
+            margin: 0;
+            color: #ffcc00;
+            font-size: 20px;
+        }
+        #loading-message {
+            min-height: 20px;
+            margin: 12px 0 16px;
+            color: #c4c8d0;
+            font-size: 14px;
+        }
+        #loading-progress {
+            width: 100%;
+            height: 10px;
+            accent-color: #ffcc00;
+        }
+        #loading-back-button {
+            width: 100%;
+            margin-top: 16px;
+        }
+        @media (max-width: 480px) {
+            #setup-form { padding: 22px; }
+            #setup-form h2 { font-size: 20px; }
+        }
+
+        [hidden] { display: none !important; }
+        body > canvas {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+        }
+        body:not(.game-active) #dashboard,
+        body:not(.game-active) #hud-actions,
+        body:not(.game-active) #controls-hint,
+        body:not(.game-active) #touch-controls {
+            visibility: hidden;
+        }
+        #loading-screen {
+            z-index: 30;
+            display: grid;
+            background:
+                radial-gradient(ellipse at 50% 40%, rgba(32, 38, 48, .55), transparent 55%),
+                #07090d;
+            backdrop-filter: none;
+        }
+        .loading-card {
+            display: flex;
+            width: min(660px, 100%);
+            min-height: 65vh;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 38px;
+            border: 0;
+            background: transparent;
+            box-shadow: none;
+        }
+        .game-logo {
+            display: block;
+            width: min(520px, 86vw);
+            max-height: 38vh;
+            object-fit: contain;
+            margin-bottom: 32px;
+            filter: drop-shadow(0 10px 32px rgba(0, 0, 0, .45));
+        }
+        .loading-ring {
+            position: relative;
+            width: 58px;
+            height: 58px;
+        }
+        .loading-ring svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+        .loading-ring circle {
+            fill: none;
+            stroke-width: 7;
+        }
+        .loading-ring-track { stroke: rgba(255, 255, 255, .16); }
+        #loading-ring-progress {
+            stroke: #ffcc00;
+            stroke-linecap: round;
+            stroke-dasharray: 276.46;
+            stroke-dashoffset: 276.46;
+            transition: stroke-dashoffset .25s ease;
+        }
+        #loading-percent {
+            position: absolute;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            color: #fff;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 12px;
+        }
+        #loading-message {
+            margin: 18px 0 0;
+            color: #c4c8d0;
+            font-size: 15px;
+        }
+        .start-prompt {
+            margin-top: 24px;
+            padding: 10px 14px;
+            border: 0;
+            background: transparent;
+            color: #ffcc00;
+            font: inherit;
+            font-size: 18px;
+            letter-spacing: .04em;
+            cursor: pointer;
+            animation: prompt-pulse 1.4s ease-in-out infinite;
+        }
+        @keyframes prompt-pulse {
+            50% { opacity: .48; }
+        }
+        #vehicle-selection {
+            position: fixed;
+            inset: 0;
+            z-index: 10;
+            pointer-events: none;
+            display: grid;
+            grid-template-columns: minmax(240px, 34%) 1fr;
+            align-items: center;
+            color: #fff;
+            background: linear-gradient(90deg, rgba(5, 7, 11, .96) 0%, rgba(5, 7, 11, .78) 34%, rgba(5, 7, 11, .08) 72%);
+        }
+        .selection-brand {
+            position: absolute;
+            top: 5vh;
+            left: 5vw;
+            width: min(300px, 30vw);
+            animation: logo-arrive .7s cubic-bezier(.2,.8,.2,1) both;
+            pointer-events: auto;
+        }
+        .selection-brand img { display: block; width: 100%; }
+        @keyframes logo-arrive {
+            from { opacity: 0; transform: translateX(45px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .vehicle-preview-copy {
+            z-index: 1;
+            grid-column: 1;
+            align-self: end;
+            margin: 0 0 13vh 5vw;
+            pointer-events: auto;
+        }
+        .eyebrow {
+            color: #ffcc00;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .2em;
+        }
+        #selected-vehicle-name {
+            max-width: 360px;
+            margin: 10px 0;
+            font-size: clamp(29px, 4vw, 52px);
+            line-height: 1;
+            text-transform: uppercase;
+        }
+        .vehicle-preview-copy .vehicle-note {
+            max-width: 290px;
+            line-height: 1.5;
+        }
+        .color-options {
+            gap: 13px;
+            margin: 24px 0 8px 4px;
+        }
+        .color-swatch {
+            width: 27px;
+            height: 27px;
+            border-color: rgba(255, 255, 255, .58);
+        }
+        #choose-vehicle { min-width: 220px; }
+        .vehicle-arrow {
+            position: absolute;
+            top: 52%;
+            z-index: 2;
+            width: 48px;
+            height: 60px;
+            border: 1px solid rgba(255, 255, 255, .42);
+            border-radius: 4px;
+            background: rgba(12, 14, 18, .45);
+            color: #fff;
+            font: 42px/1 'Segoe UI', sans-serif;
+            cursor: pointer;
+            transform: translateY(-50%);
+            transition: .2s ease;
+            pointer-events: auto;
+        }
+        .vehicle-arrow:hover { border-color: #ffcc00; color: #ffcc00; }
+        #previous-vehicle { left: 38%; }
+        #next-vehicle { right: 5vw; }
+        .vehicle-pagination {
+            position: absolute;
+            right: 6vw;
+            bottom: 7vh;
+            color: #fff;
+            font-size: 14px;
+            letter-spacing: .14em;
+        }
+        #plate-dialog {
+            width: min(420px, calc(100% - 36px));
+            padding: 0;
+            overflow: visible;
+            border: 1px solid rgba(255, 204, 0, .55);
+            border-radius: 14px;
+            background: #11131c;
+            color: #eee;
+            box-shadow: 0 18px 80px rgba(0, 0, 0, .7);
+        }
+        #plate-dialog::backdrop { background: rgba(0, 0, 0, .76); backdrop-filter: blur(7px); }
+        #setup-form { width: auto; margin: 0; }
+        #setup-form h2 { margin: 10px 0 4px; color: #ffcc00; }
+        #setup-form .intro { margin-bottom: 18px; }
+        #player-name { box-sizing: border-box; }
+        #start-button { letter-spacing: .08em; }
+        .text-button {
+            display: block;
+            width: 100%;
+            margin-top: 12px;
+            padding: 8px;
+            border: 0;
+            background: transparent;
+            color: #b6bbc3;
+            font: inherit;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .text-button:hover { color: #fff; }
+        #start-error { color: #ff8585; font-size: 13px; }
+        @media (max-width: 700px) {
+            #vehicle-selection {
+                grid-template-columns: 1fr;
+                grid-template-rows: 1fr auto;
+                background: linear-gradient(0deg, rgba(5, 7, 11, .96) 0%, rgba(5, 7, 11, .76) 42%, rgba(5, 7, 11, .1) 78%);
+            }
+            .selection-brand {
+                top: 3vh;
+                left: 50%;
+                width: min(220px, 52vw);
+                transform: translateX(-50%);
+                animation-name: logo-arrive-mobile;
+            }
+            @keyframes logo-arrive-mobile {
+                from { opacity: 0; transform: translate(-50%, 20px); }
+                to { opacity: 1; transform: translate(-50%, 0); }
+            }
+            .vehicle-preview-copy {
+                grid-column: 1;
+                align-self: end;
+                margin: 0 8vw 9vh;
+            }
+            #selected-vehicle-name { font-size: clamp(28px, 9vw, 42px); }
+            #previous-vehicle { left: 4vw; top: 45%; }
+            #next-vehicle { right: 4vw; top: 45%; }
+            .vehicle-pagination { right: 8vw; bottom: 4vh; }
+            .game-logo { width: min(420px, 88vw); }
+        }
