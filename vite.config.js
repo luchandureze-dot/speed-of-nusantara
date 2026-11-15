@@ -8,7 +8,7 @@ function copyStaticDirectories() {
     name: 'copy-static-directories',
     closeBundle() {
       const distDir = resolve(process.cwd(), 'dist');
-      for (const dir of ['assets', 'js']) {
+      for (const dir of ['assets', 'js', 'tools']) {
         const src = resolve(process.cwd(), dir);
         const dest = resolve(distDir, dir);
         if (existsSync(src)) {

@@ -139,14 +139,14 @@
         function getVisualWheelMounts(vehicleType, model) {
             const mounts = vehicleType === 'motorcycle'
                 ? [
-                    { x: 0, y: 0.24, z: -0.73, radius: nmaxNeoSpecs.frontTireRadius, width: nmaxNeoSpecs.frontTireWidth, axle: 'front' },
-                    { x: 0, y: 0.24, z: 0.62, radius: nmaxNeoSpecs.rearTireRadius, width: nmaxNeoSpecs.rearTireWidth, axle: 'rear' }
+                    { x: 0, y: 0.2379, z: -0.73, radius: nmaxNeoSpecs.frontTireRadius, width: nmaxNeoSpecs.frontTireWidth, axle: 'front' },
+                    { x: 0, y: 0.2379, z: 0.6234, radius: nmaxNeoSpecs.rearTireRadius, width: nmaxNeoSpecs.rearTireWidth, axle: 'rear' }
                 ]
                 : [
-                    { x: -0.86, y: 0.36, z: -1.25, radius: innovaZenixSpecs.dynamicTireRadius, width: innovaZenixSpecs.tireWidth, axle: 'front' },
-                    { x: 0.86, y: 0.36, z: -1.25, radius: innovaZenixSpecs.dynamicTireRadius, width: innovaZenixSpecs.tireWidth, axle: 'front' },
-                    { x: -0.86, y: 0.36, z: 1.59, radius: innovaZenixSpecs.dynamicTireRadius, width: innovaZenixSpecs.tireWidth, axle: 'rear' },
-                    { x: 0.86, y: 0.36, z: 1.59, radius: innovaZenixSpecs.dynamicTireRadius, width: innovaZenixSpecs.tireWidth, axle: 'rear' }
+                    { x: -0.7757, y: 0.3402, z: -1.4477, radius: innovaZenixSpecs.dynamicTireRadius, width: innovaZenixSpecs.tireWidth, axle: 'front' },
+                    { x: 0.7757, y: 0.3402, z: -1.4477, radius: innovaZenixSpecs.dynamicTireRadius, width: innovaZenixSpecs.tireWidth, axle: 'front' },
+                    { x: -0.7757, y: 0.3402, z: 1.4041, radius: innovaZenixSpecs.dynamicTireRadius, width: innovaZenixSpecs.tireWidth, axle: 'rear' },
+                    { x: 0.7757, y: 0.3402, z: 1.4041, radius: innovaZenixSpecs.dynamicTireRadius, width: innovaZenixSpecs.tireWidth, axle: 'rear' }
                 ];
 
             mounts.forEach(mount => {
@@ -260,6 +260,7 @@
                 dimensions.wheelbase;
             bodyContent.position.set(0, -physics.cgHeight, -cgOffsetZ);
             playerWheelPivots = [];
+            carGroup.updateMatrixWorld(true);
             carGroup.children.forEach(model => {
                 (model.userData.wheelPivots || []).forEach(wheelPivot => {
                     const modelPosition = model.localToWorld(wheelPivot.position.clone());

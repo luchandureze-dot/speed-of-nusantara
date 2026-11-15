@@ -5,10 +5,10 @@
             path: '../assets/toyota-innova-zenix-2023/model.dae',
             output: '../assets/toyota-innova-zenix-2023/wheel-annotations.json',
             roles: [
-                { id: 'front-left', label: 'Depan kiri', color: 0x3aa6ff, x: -0.86, y: 0.36, z: -1.25 },
-                { id: 'front-right', label: 'Depan kanan', color: 0x45d483, x: 0.86, y: 0.36, z: -1.25 },
-                { id: 'rear-left', label: 'Belakang kiri', color: 0xffc247, x: -0.86, y: 0.36, z: 1.59 },
-                { id: 'rear-right', label: 'Belakang kanan', color: 0xff6b6b, x: 0.86, y: 0.36, z: 1.59 }
+                { id: 'front-left', label: 'Depan kiri', color: 0x3aa6ff, x: -0.7757, y: 0.3402, z: -1.4477 },
+                { id: 'front-right', label: 'Depan kanan', color: 0x45d483, x: 0.7757, y: 0.3402, z: -1.4477 },
+                { id: 'rear-left', label: 'Belakang kiri', color: 0xffc247, x: -0.7757, y: 0.3402, z: 1.4041 },
+                { id: 'rear-right', label: 'Belakang kanan', color: 0xff6b6b, x: 0.7757, y: 0.3402, z: 1.4041 }
             ]
         },
         motorcycle: {
@@ -16,8 +16,8 @@
             path: '../assets/yamaha-nmax-neo-155/model.dae',
             output: '../assets/yamaha-nmax-neo-155/wheel-annotations.json',
             roles: [
-                { id: 'front', label: 'Depan', color: 0x3aa6ff, x: 0, y: 0.24, z: -0.73 },
-                { id: 'rear', label: 'Belakang', color: 0xffc247, x: 0, y: 0.24, z: 0.62 }
+                { id: 'front', label: 'Depan', color: 0x3aa6ff, x: 0, y: 0.2379, z: -0.73 },
+                { id: 'rear', label: 'Belakang', color: 0xffc247, x: 0, y: 0.2379, z: 0.6234 }
             ]
         }
     };
@@ -745,10 +745,49 @@
         previewObjectByPath.clear();
         setStatus(`Memuat ${models[type].name}...`);
 
+        async function loadChunkedColladaText(modelPath) {
+            try {
+                const manifestRes = await fetch(`${modelPath}.chunks.json`);
+                if (!manifestRes.ok) return null;
+                const contentType = manifestRes.headers.get('content-type') || '';
+                if (contentType.includes('text/html')) return null;
+                const manifest = await manifestRes.json();
+                if (!manifest || !Array.isArray(manifest.chunks) || !manifest.chunks.length) {
+                    return null;
+                }
+                const baseUrl = THREE.LoaderUtils.extractUrlBase(modelPath);
+                const buffers = await Promise.all(
+                    manifest.chunks.map(async chunkName => {
+                        const chunkRes = await fetch(`${baseUrl}${chunkName}`);
+                        if (!chunkRes.ok) {
+                            throw new Error(`Gagal mengunduh bagian model (${chunkName}: HTTP ${chunkRes.status}).`);
+                        }
+                        return chunkRes.arrayBuffer();
+                    })
+                );
+                const compressedBlob = new Blob(buffers);
+                if (manifest.encoding === 'gzip') {
+                    if (typeof DecompressionStream === 'undefined') {
+                        throw new Error('Browser tidak mendukung DecompressionStream untuk model terkompresi.');
+                    }
+                    const decompressedStream = compressedBlob.stream()
+                        .pipeThrough(new DecompressionStream('gzip'));
+                    return await new Response(decompressedStream).text();
+                }
+                return await compressedBlob.text();
+            } catch (error) {
+                console.warn(`Gagal memuat model terpecah untuk ${modelPath}:`, error);
+                return null;
+            }
+        }
+
         try {
-            const collada = await new Promise((resolve, reject) => {
-                loader.load(models[type].path, resolve, undefined, reject);
-            });
+            const chunkedText = await loadChunkedColladaText(models[type].path);
+            const collada = chunkedText
+                ? loader.parse(chunkedText, THREE.LoaderUtils.extractUrlBase(models[type].path))
+                : await new Promise((resolve, reject) => {
+                    loader.load(models[type].path, resolve, undefined, reject);
+                });
             const sketchUpScene = collada.scene.children.find(child => child.name === 'SketchUp');
             const foundVehicle = sketchUpScene &&
                 sketchUpScene.children.find(child => child.name === 'group_0');
