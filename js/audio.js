@@ -7,6 +7,9 @@
         let roadFilter = null;
         let roadGain = null;
         let brakeGain = null;
+        let scrapeGain = null;
+        let sirenOsc = null;
+        let sirenGain = null;
         let audioInitialized = false;
 
         function createNoiseBuffer(context) {
@@ -97,6 +100,40 @@
                 brakeGain.connect(audioCtx.destination);
                 brakeNoise.start();
 
+                const scrapeNoise = audioCtx.createBufferSource();
+                scrapeNoise.buffer = noiseBuffer;
+                scrapeNoise.loop = true;
+
+                const scrapeFilter = audioCtx.createBiquadFilter();
+                scrapeFilter.type = 'bandpass';
+                scrapeFilter.frequency.value = 920;
+                scrapeFilter.Q.value = 1.9;
+
+                scrapeGain = audioCtx.createGain();
+                scrapeGain.gain.value = 0;
+
+                scrapeNoise.connect(scrapeFilter);
+                scrapeFilter.connect(scrapeGain);
+                scrapeGain.connect(audioCtx.destination);
+                scrapeNoise.start();
+
+                const sirenFilter = audioCtx.createBiquadFilter();
+                sirenFilter.type = 'bandpass';
+                sirenFilter.frequency.value = 1050;
+                sirenFilter.Q.value = 1.4;
+
+                sirenGain = audioCtx.createGain();
+                sirenGain.gain.value = 0;
+
+                sirenOsc = audioCtx.createOscillator();
+                sirenOsc.type = 'sawtooth';
+                sirenOsc.frequency.value = 720;
+
+                sirenOsc.connect(sirenFilter);
+                sirenFilter.connect(sirenGain);
+                sirenGain.connect(audioCtx.destination);
+                sirenOsc.start();
+
                 audioInitialized = true;
             } catch (error) {
                 console.warn('Audio tidak dapat diaktifkan:', error);
@@ -116,15 +153,18 @@
             updateAudioButtonUi();
             if (!isAudioMuted) {
                 initGameAudio();
-            } else if (audioCtx && engineGain && roadGain && brakeGain) {
+            } else if (audioCtx && engineGain && roadGain && brakeGain && scrapeGain) {
                 const now = audioCtx.currentTime;
                 engineGain.gain.setTargetAtTime(0, now, 0.04);
                 roadGain.gain.setTargetAtTime(0, now, 0.04);
                 brakeGain.gain.setTargetAtTime(0, now, 0.04);
+                scrapeGain.gain.setTargetAtTime(0, now, 0.04);
+                if (sirenGain) sirenGain.gain.setTargetAtTime(0, now, 0.04);
+                stopPoliceVoice();
             }
         }
 
-        function updateGameAudio(rpm, idleRpm, maxRpm, speedMps, throttleActive, brakingActive, vehicleType, active) {
+        function updateGameAudio(rpm, idleRpm, maxRpm, speedMps, throttleActive, brakingActive, vehicleType, active, skidIntensity = 0, scrapeIntensity = 0, sirenIntensity = 0) {
             if (!audioInitialized || !audioCtx) return;
             const now = audioCtx.currentTime;
 
@@ -132,6 +172,8 @@
                 engineGain.gain.setTargetAtTime(0, now, 0.06);
                 roadGain.gain.setTargetAtTime(0, now, 0.06);
                 brakeGain.gain.setTargetAtTime(0, now, 0.04);
+                if (scrapeGain) scrapeGain.gain.setTargetAtTime(0, now, 0.04);
+                if (sirenGain) sirenGain.gain.setTargetAtTime(0, now, 0.04);
                 return;
             }
 
@@ -153,8 +195,27 @@
             roadFilter.frequency.setTargetAtTime(320 + speedRatio * 900, now, 0.08);
             roadGain.gain.setTargetAtTime(speedRatio * 0.06, now, 0.08);
 
-            const showBrakeSqueal = brakingActive && Math.abs(speedMps) > 8;
-            brakeGain.gain.setTargetAtTime(showBrakeSqueal ? 0.025 * speedRatio : 0, now, 0.04);
+            const brakeSqueal = brakingActive && Math.abs(speedMps) > 8 ? 0.025 * speedRatio : 0;
+            const tireScreech = skidIntensity > 0.12 && Math.abs(speedMps) > 2.5
+                ? skidIntensity * (0.018 + 0.026 * speedRatio)
+                : 0;
+            brakeGain.gain.setTargetAtTime(Math.max(brakeSqueal, tireScreech), now, 0.035);
+
+            if (scrapeGain) {
+                scrapeGain.gain.setTargetAtTime(scrapeIntensity > 0 ? Math.min(0.08, scrapeIntensity * 0.08) : 0, now, 0.025);
+            }
+
+            if (sirenGain && sirenOsc) {
+                if (sirenIntensity > 0.01) {
+                    const sweepRate = sirenIntensity > 0.5 ? 2.6 : 1.15;
+                    const sirenWave = 0.5 - 0.5 * Math.cos(now * Math.PI * 2 * sweepRate);
+                    const sirenFreq = 640 + sirenWave * 460;
+                    sirenOsc.frequency.setTargetAtTime(sirenFreq, now, 0.02);
+                    sirenGain.gain.setTargetAtTime(THREE.MathUtils.clamp(sirenIntensity * 0.085, 0, 0.085), now, 0.04);
+                } else {
+                    sirenGain.gain.setTargetAtTime(0, now, 0.06);
+                }
+            }
         }
 
         function playCrashSound() {
@@ -221,5 +282,64 @@
                 osc.stop(now + 0.18);
             } catch (error) {
                 console.warn('Gagal memutar suara salip tipis:', error);
+            }
+        }
+
+        function stopPoliceVoice() {
+            try {
+                if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis) {
+                    window.speechSynthesis.cancel();
+                }
+            } catch {
+                // Abaikan jika SpeechSynthesis tidak tersedia.
+            }
+        }
+
+        function playPolicePullOverVoice() {
+            if (isAudioMuted) return;
+            try {
+                if (audioInitialized && audioCtx) {
+                    const now = audioCtx.currentTime;
+                    const chirpOsc = audioCtx.createOscillator();
+                    chirpOsc.type = 'square';
+                    chirpOsc.frequency.setValueAtTime(1180, now);
+                    chirpOsc.frequency.setValueAtTime(860, now + 0.055);
+
+                    const chirpFilter = audioCtx.createBiquadFilter();
+                    chirpFilter.type = 'bandpass';
+                    chirpFilter.frequency.value = 1100;
+                    chirpFilter.Q.value = 2.0;
+
+                    const chirpGain = audioCtx.createGain();
+                    chirpGain.gain.setValueAtTime(0.07, now);
+                    chirpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+
+                    chirpOsc.connect(chirpFilter);
+                    chirpFilter.connect(chirpGain);
+                    chirpGain.connect(audioCtx.destination);
+                    chirpOsc.start(now);
+                    chirpOsc.stop(now + 0.14);
+                }
+
+                if (typeof window !== 'undefined' && 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined') {
+                    const synth = window.speechSynthesis;
+                    if (!synth) return;
+                    if (synth.speaking) synth.cancel();
+
+                    const utterance = new SpeechSynthesisUtterance('Harap menepi sekarang juga!');
+                    utterance.lang = 'id-ID';
+                    utterance.rate = 1.06;
+                    utterance.pitch = 0.92;
+                    utterance.volume = 1.0;
+
+                    const voices = synth.getVoices ? synth.getVoices() : [];
+                    const idVoice = voices.find(v => /^id[-_]/i.test(v.lang)) ||
+                        voices.find(v => /indonesia/i.test(v.name));
+                    if (idVoice) utterance.voice = idVoice;
+
+                    synth.speak(utterance);
+                }
+            } catch (error) {
+                console.warn('Suara pengeras suara polisi gagal diputar:', error);
             }
         }

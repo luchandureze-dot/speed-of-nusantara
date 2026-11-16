@@ -10,6 +10,10 @@
             if (e.key === 's' || e.key === 'ArrowDown') keys.backward = true;
             if (e.key === 'a' || e.key === 'ArrowLeft') keys.left = true;
             if (e.key === 'd' || e.key === 'ArrowRight') keys.right = true;
+            if (e.code === 'Space' || e.key === ' ') {
+                e.preventDefault();
+                keys.handbrake = true;
+            }
             if (e.key === 'c' || e.key === 'C') {
                 cameraMode = cameraMode === 1 ? 2 : 1;
             }
@@ -21,6 +25,10 @@
             if (e.key === 's' || e.key === 'ArrowDown') keys.backward = false;
             if (e.key === 'a' || e.key === 'ArrowLeft') keys.left = false;
             if (e.key === 'd' || e.key === 'ArrowRight') keys.right = false;
+            if (e.code === 'Space' || e.key === ' ') {
+                if (hasStarted) e.preventDefault();
+                keys.handbrake = false;
+            }
         }
 
         function onWindowResize() {
@@ -97,6 +105,11 @@
             keys.backward = false;
             keys.left = false;
             keys.right = false;
+            keys.handbrake = false;
+            steeringInputSmoothed = 0;
+            throttleVisual = 0;
+            brakeVisual = 0;
+            handbrakeVisual = 0;
             document.querySelectorAll('.touch-btn.is-active').forEach(btn => {
                 btn.classList.remove('is-active');
             });
@@ -106,6 +119,7 @@
             const bindings = [
                 { id: 'touch-left', key: 'left' },
                 { id: 'touch-right', key: 'right' },
+                { id: 'touch-handbrake', key: 'handbrake' },
                 { id: 'touch-brake', key: 'backward' },
                 { id: 'touch-gas', key: 'forward' }
             ];

@@ -3,7 +3,7 @@
             // 1. Scene & Renderer
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x0a0a1a); // Nuansa malam senja kota
-            scene.fog = new THREE.FogExp2(0x0a0a1a, 0.015);
+            scene.fog = new THREE.FogExp2(0x0a0a1a, 0.0022);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -12,7 +12,7 @@
             setupCameraControls(renderer.domElement);
 
             // 2. Camera
-            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2500);
             previewScene = new THREE.Scene();
             previewScene.background = new THREE.Color(0x11151d);
             previewCamera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -37,6 +37,7 @@
 
             // 4. Buat Dunia Tol
             const roadTexturesReady = createEnvironment();
+            initSkidmarksSystem();
 
             // 5. Event Listeners
             window.addEventListener('resize', onWindowResize);
@@ -59,6 +60,10 @@
             document.getElementById('back-to-selection').addEventListener('click', () => {
                 document.getElementById('plate-dialog').close();
             });
+            const exitGameButton = document.getElementById('exit-game');
+            if (exitGameButton) {
+                exitGameButton.addEventListener('click', exitToHome);
+            }
             const controlsToggle = document.getElementById('controls-toggle');
             const controlsHint = document.getElementById('controls-hint');
             controlsToggle.addEventListener('click', () => {
@@ -69,11 +74,28 @@
                     controlsHint.hidden ? 'Tampilkan petunjuk kontrol' : 'Sembunyikan petunjuk kontrol'
                 );
             });
-            document.querySelectorAll('.color-swatch').forEach(button => {
+            document.querySelectorAll('.brand-tab').forEach(button => {
                 button.addEventListener('click', () => {
-                    setVehicleColor(button.dataset.color);
+                    const vehicleType = button.dataset.brand === 'yamaha' ? 'motorcycle' : 'car';
+                    updateVehicleSelection(vehicleType);
                 });
             });
+
+            const hueSlider = document.getElementById('color-hue');
+            const lightnessSlider = document.getElementById('color-lightness');
+            const applyColorSliders = () => {
+                if (!hueSlider || !lightnessSlider) return;
+                const hue = Number(hueSlider.value);
+                const lightness = Number(lightnessSlider.value);
+                setVehicleColor(hslToVehicleHex(hue, lightness));
+                lightnessSlider.style.background =
+                    `linear-gradient(90deg, #0d0d0d 0%, hsl(${hue}, 90%, 50%) 50%, #f2f2f2 100%)`;
+            };
+            if (hueSlider && lightnessSlider) {
+                hueSlider.addEventListener('input', applyColorSliders);
+                lightnessSlider.addEventListener('input', applyColorSliders);
+                applyColorSliders();
+            }
 
             const audioToggle = document.getElementById('audio-toggle');
             if (audioToggle) {
@@ -179,6 +201,10 @@
                 previewScene.add(pivot);
             }
             const isCar = vehicleType === 'car';
+            const activeBrand = isCar ? 'toyota' : 'yamaha';
+            document.querySelectorAll('.brand-tab').forEach(tab => {
+                tab.setAttribute('aria-pressed', String(tab.dataset.brand === activeBrand));
+            });
             document.getElementById('selected-vehicle-name').innerText =
                 isCar ? 'Innova Zenix' : 'Yamaha NMAX 155 Neo';
             document.getElementById('vehicle-page').innerText = isCar ? '01 / 02' : '02 / 02';
@@ -200,11 +226,25 @@
             previewCamera.lookAt(-cameraOffset, isCar ? 0.9 : 0.65, 0);
         }
 
+        function hslToVehicleHex(hue, lightnessPercent) {
+            let saturation = 90;
+            if (lightnessPercent <= 15) {
+                saturation = (lightnessPercent / 15) * 90;
+            } else if (lightnessPercent >= 85) {
+                saturation = ((100 - lightnessPercent) / 15) * 90;
+            }
+            const adjustedLightness = 5 + lightnessPercent * 0.9;
+            const color = new THREE.Color();
+            color.setHSL((hue % 360) / 360, saturation / 100, adjustedLightness / 100);
+            return `#${color.getHexString()}`;
+        }
+
         function setVehicleColor(color) {
             selectedVehicleColor = color;
-            document.querySelectorAll('.color-swatch').forEach(swatch => {
-                swatch.setAttribute('aria-pressed', String(swatch.dataset.color === color));
-            });
+            const previewChip = document.getElementById('color-preview-chip');
+            if (previewChip) {
+                previewChip.style.background = color;
+            }
             Object.values(previewVehicleModels).forEach(model => {
                 model.traverse(child => {
                     if (!child.isMesh) return;
@@ -239,6 +279,61 @@
             canvas.addEventListener('pointercancel', stopPreviewDrag);
         }
 
+        const _satCollisionResult = { hit: false, nx: 0, nz: 0, penetration: 0 };
+        let activeScrapeIntensity = 0;
+
+        function computeObbCollision2D(ax, az, aYaw, aHalfL, aHalfW, bx, bz, bYaw, bHalfL, bHalfW) {
+            const aFwdX = -Math.sin(aYaw);
+            const aFwdZ = -Math.cos(aYaw);
+            const aRightX = Math.cos(aYaw);
+            const aRightZ = -Math.sin(aYaw);
+
+            const bFwdX = -Math.sin(bYaw);
+            const bFwdZ = -Math.cos(bYaw);
+            const bRightX = Math.cos(bYaw);
+            const bRightZ = -Math.sin(bYaw);
+
+            const dx = ax - bx;
+            const dz = az - bz;
+
+            let minOverlap = Infinity;
+            let bestNx = 0;
+            let bestNz = 0;
+
+            for (let axis = 0; axis < 4; axis++) {
+                let ux, uz;
+                if (axis === 0) { ux = aFwdX; uz = aFwdZ; }
+                else if (axis === 1) { ux = aRightX; uz = aRightZ; }
+                else if (axis === 2) { ux = bFwdX; uz = bFwdZ; }
+                else { ux = bRightX; uz = bRightZ; }
+
+                const centerDist = Math.abs(dx * ux + dz * uz);
+                const projA = aHalfL * Math.abs(aFwdX * ux + aFwdZ * uz) +
+                    aHalfW * Math.abs(aRightX * ux + aRightZ * uz);
+                const projB = bHalfL * Math.abs(bFwdX * ux + bFwdZ * uz) +
+                    bHalfW * Math.abs(bRightX * ux + bRightZ * uz);
+                const overlap = projA + projB - centerDist;
+
+                if (overlap <= 0) {
+                    _satCollisionResult.hit = false;
+                    return _satCollisionResult;
+                }
+
+                if (overlap < minOverlap) {
+                    minOverlap = overlap;
+                    const sign = (dx * ux + dz * uz) >= 0 ? 1 : -1;
+                    bestNx = ux * sign;
+                    bestNz = uz * sign;
+                }
+            }
+
+            _satCollisionResult.hit = true;
+            _satCollisionResult.nx = bestNx;
+            _satCollisionResult.nz = bestNz;
+            _satCollisionResult.penetration = minOverlap;
+            return _satCollisionResult;
+        }
+
         // Loop Animasi Utama Game
         function animate() {
             if (isGameOver) return;
@@ -260,42 +355,122 @@
 
             updateVehiclePhysics(dt);
 
-            playerCar.rotation.x = 0;
-            playerCar.rotation.z = 0;
-
+            const physics = vehiclePhysicsConfigs[selectedVehicleType];
             let roadContact = findNearestRoadPoint(playerX, playerY, playerZ, lastPlayerSegmentIndex);
             if (roadContact) lastPlayerSegmentIndex = roadContact.segmentIndex;
-            if (roadContact && roadContact.horizontalDistance > 7.1 && roadContact.verticalDistance <= 2.5) {
+            if (roadContact && roadContact.horizontalDistance > 7.1 && roadContact.verticalDistance <= 3.5) {
                 const distance = roadContact.horizontalDistance || 1;
                 const normalX = (playerX - roadContact.x) / distance;
                 const normalZ = (playerZ - roadContact.z) / distance;
                 playerX = roadContact.x + normalX * 7.1;
                 playerZ = roadContact.z + normalZ * 7.1;
                 const outwardSpeed = velocityX * normalX + velocityZ * normalZ;
+                const wallForwardX = -Math.sin(playerYaw);
+                const wallForwardZ = -Math.cos(playerYaw);
+                const crossSign = wallForwardX * normalZ - wallForwardZ * normalX;
                 if (outwardSpeed > 0) {
-                    velocityX -= outwardSpeed * normalX;
-                    velocityZ -= outwardSpeed * normalZ;
-                    velocityX *= 0.85;
-                    velocityZ *= 0.85;
+                    velocityX -= outwardSpeed * normalX * 1.28;
+                    velocityZ -= outwardSpeed * normalZ * 1.28;
+                    const scrapeFactor = Math.max(0.90, 1 - 1.8 * dt);
+                    velocityX *= scrapeFactor;
+                    velocityZ *= scrapeFactor;
+                    if (outwardSpeed > 2.2) {
+                        const impactFactor = Math.min(1, outwardSpeed / 14);
+                        yawRate += Math.sign(crossSign || 1) * impactFactor * 0.9;
+                        bodyRollVelocity += Math.sign(crossSign || 1) * impactFactor * 1.4;
+                        cameraShakeIntensity = Math.max(
+                            cameraShakeIntensity,
+                            Math.min(0.32, outwardSpeed * 0.028)
+                        );
+                    }
+                }
+                const intoWallDot = wallForwardX * normalX + wallForwardZ * normalZ;
+                if (intoWallDot > 0.02) {
+                    // Belokkan moncong menjauhi pembatas jalan secara halus agar tidak menempel
+                    playerYaw += Math.sign(crossSign || 1) * intoWallDot * Math.min(1, dt * 6.5);
+                    yawRate *= 0.68;
                 }
                 roadContact = findNearestRoadPoint(playerX, playerY, playerZ, lastPlayerSegmentIndex);
                 if (roadContact) lastPlayerSegmentIndex = roadContact.segmentIndex;
             }
 
-            const onRoad = Boolean(roadContact) && roadContact.horizontalDistance <= 7.2 && roadContact.verticalDistance <= 2.5;
+            const overRoad = Boolean(roadContact) && roadContact.horizontalDistance <= 7.2 && Math.abs(playerY - roadContact.y) <= 6.0;
+            const groundY = overRoad ? roadContact.y : 0;
+            const wasAirborne = isAirborne;
+            const prevVerticalVelocity = verticalVelocity;
+            const verticalSubsteps = 8;
+            const subDt = dt / verticalSubsteps;
+            const totalSuspensionStiffness = physics.frontSpringRate + physics.rearSpringRate;
+            const criticalDamping = 2 * Math.sqrt(totalSuspensionStiffness * physics.mass);
+            let wheelsInContact = false;
+
+            for (let step = 0; step < verticalSubsteps; step++) {
+                const compression = groundY - playerY;
+                if (compression >= -physics.suspensionMaxDroop) {
+                    wheelsInContact = true;
+                    const dampingRatio = verticalVelocity < 0
+                        ? physics.dampingCompression
+                        : physics.dampingRelaxation;
+                    const damping = dampingRatio * criticalDamping;
+                    const springForce = physics.mass * gravity +
+                        totalSuspensionStiffness * compression -
+                        damping * verticalVelocity;
+                    const normalAccel = Math.max(0, springForce / physics.mass);
+                    verticalVelocity += (normalAccel - gravity) * subDt;
+                    playerY += verticalVelocity * subDt;
+                    const minRideY = groundY - physics.suspensionMaxCompression;
+                    if (playerY < minRideY) {
+                        playerY = minRideY;
+                        if (verticalVelocity < 0) verticalVelocity = 0;
+                    }
+                } else {
+                    wheelsInContact = false;
+                    verticalVelocity -= gravity * subDt;
+                    playerY += verticalVelocity * subDt;
+                    if (playerY < 0) {
+                        playerY = 0;
+                        if (verticalVelocity < 0) verticalVelocity = 0;
+                        wheelsInContact = true;
+                    }
+                }
+            }
+
+            isAirborne = !wheelsInContact;
+            chassisSuspensionOffset = THREE.MathUtils.clamp(
+                playerY - groundY,
+                -physics.suspensionMaxCompression,
+                physics.suspensionMaxDroop
+            );
+
+            if (wasAirborne && !isAirborne && prevVerticalVelocity < -1.0) {
+                const landingImpact = Math.min(1, Math.abs(prevVerticalVelocity) / 6.5);
+                cameraShakeIntensity = Math.max(cameraShakeIntensity, landingImpact * 0.24);
+                bodyPitchVelocity += landingImpact * 0.8;
+                motorcyclePitchVelocity += landingImpact * 0.65;
+            }
+
+            const onRoad = overRoad && !isAirborne;
             if (onRoad) {
-                playerY = roadContact.y;
-                verticalVelocity = 0;
+                const headingAlign =
+                    (-Math.sin(playerYaw)) * roadContact.tangentX +
+                    (-Math.cos(playerYaw)) * roadContact.tangentZ;
+                roadSlopeSin = THREE.MathUtils.clamp(
+                    headingAlign * roadContact.slopeSin,
+                    -0.45,
+                    0.45
+                );
+                roadPitchAngle = Math.asin(roadSlopeSin);
             } else {
-                verticalVelocity -= 9.81 * dt;
-                playerY = Math.max(0, playerY + verticalVelocity * dt);
-                if (playerY === 0) verticalVelocity = 0;
-                const speedMagnitude = Math.hypot(velocityX, velocityZ);
-                if (speedMagnitude > 0) {
-                    const speedAfterOffRoadDrag = Math.max(0, speedMagnitude - 5 * dt);
-                    const speedScale = speedAfterOffRoadDrag / speedMagnitude;
-                    velocityX *= speedScale;
-                    velocityZ *= speedScale;
+                roadSlopeSin = 0;
+                roadPitchAngle = THREE.MathUtils.damp(roadPitchAngle, 0, isAirborne ? 2.2 : 4, dt);
+                if (!overRoad && !isAirborne) {
+                    const speedMagnitude = Math.hypot(velocityX, velocityZ);
+                    if (speedMagnitude > 0) {
+                        const speedAfterOffRoadDrag = Math.max(0, speedMagnitude - 5 * dt);
+                        const speedScale = speedAfterOffRoadDrag / speedMagnitude;
+                        velocityX *= speedScale;
+                        velocityZ *= speedScale;
+                    }
                 }
             }
 
@@ -308,18 +483,32 @@
                 playerY + vehiclePhysicsConfigs[selectedVehicleType].cgHeight,
                 playerZ
             );
+            playerCar.rotation.x = roadPitchAngle;
             playerCar.rotation.y = playerYaw;
+            playerCar.rotation.z = 0;
+            if (roadContact) {
+                const roadRightX = -roadContact.tangentZ;
+                const roadRightZ = roadContact.tangentX;
+                playerRoadLateral = (playerX - roadContact.x) * roadRightX + (playerZ - roadContact.z) * roadRightZ;
+            }
             updatePlayerWheelVisuals(dt, onRoad);
+            updatePlayerSkidmarks(onRoad, roadContact);
             totalDistance += Math.hypot(velocityX, velocityZ) * dt;
             score = Math.floor(totalDistance) + bonusScore;
             document.getElementById('score').innerText = score;
             if (score > bestScore) {
                 document.getElementById('best-score').innerText = String(score);
             }
+            const activePhysics = vehiclePhysicsConfigs[selectedVehicleType];
             const measuredSpeed = Math.hypot(velocityX, velocityZ) * 3.6;
             document.getElementById('speed-value').innerText = Math.floor(carSpeed < 0 ? -measuredSpeed : measuredSpeed);
+            const speedBarFill = document.getElementById('speed-bar-fill');
+            if (speedBarFill) {
+                const maxKmh = activePhysics.maxSpeed * 3.6;
+                const speedPercent = THREE.MathUtils.clamp((measuredSpeed / Math.max(1, maxKmh)) * 100, 0, 100);
+                speedBarFill.style.width = `${speedPercent.toFixed(1)}%`;
+            }
 
-            const activePhysics = vehiclePhysicsConfigs[selectedVehicleType];
             const brakingNow = keys.backward && !keys.forward && carSpeed > 0.5;
             updateGameAudio(
                 engineRpm,
@@ -329,7 +518,10 @@
                 keys.forward,
                 brakingNow,
                 selectedVehicleType,
-                true
+                true,
+                maxTireSkid,
+                activeScrapeIntensity,
+                getActivePoliceSirenIntensity()
             );
 
             if (nearMissBannerTimer > 0) {
@@ -392,44 +584,224 @@
                 );
             }
 
-            // Gerakkan & Cek Tabrakan dengan Mobil Lain (NPC)
+            // Gerakkan & Cek Tabrakan dengan Mobil Lain (NPC) tanpa clipping (SAT 2D + grinding + dorongan)
             updateTrafficFlow(dt);
-            const playerHalfLength = selectedVehicleType === 'motorcycle'
-                ? nmaxNeoSpecs.length / 2
-                : innovaZenixSpecs.length / 2;
-            const playerHalfWidth = selectedVehicleType === 'motorcycle'
-                ? nmaxNeoSpecs.width / 2
-                : innovaZenixSpecs.width / 2;
+            const playerDimensions = selectedVehicleType === 'motorcycle' ? nmaxNeoSpecs : innovaZenixSpecs;
+            const playerHalfLength = playerDimensions.length / 2 + 0.05;
+            const playerHalfWidth = playerDimensions.width / 2 + 0.03;
+            const playerCgOffsetZ = (activePhysics.weightDistributionFront - 0.5) * playerDimensions.wheelbase;
+            const playerMass = activePhysics.mass;
             const forwardX = -Math.sin(playerYaw);
             const forwardZ = -Math.cos(playerYaw);
+            const playerRightX = Math.cos(playerYaw);
+            const playerRightZ = -Math.sin(playerYaw);
+            let frameScrapeIntensity = 0;
 
             for (let i = trafficCars.length - 1; i >= 0; i--) {
                 const npc = trafficCars[i];
+                const npcData = npc.userData;
+                const playerBoxCenterX = playerX - forwardX * playerCgOffsetZ;
+                const playerBoxCenterZ = playerZ - forwardZ * playerCgOffsetZ;
+                const rawDx = npc.position.x - playerBoxCenterX;
+                const rawDz = npc.position.z - playerBoxCenterZ;
+
+                if (Math.abs(rawDx) > 8.5 || Math.abs(rawDz) > 8.5) {
+                    if (npcData.nearMissed) {
+                        const wrappedDelta = Math.abs(npcData.progress - playerTrackProgress);
+                        const distFromPlayer = Math.min(wrappedDelta, 1 - wrappedDelta) * trackLength;
+                        if (distFromPlayer > 35) npcData.nearMissed = false;
+                    }
+                    continue;
+                }
+
+                const sameRoadLevel = Math.abs(playerY - npc.position.y) < 2;
+                if (!sameRoadLevel) continue;
+
+                const npcHalfLength = (npcData.halfLength || 2.0) + 0.08;
+                const npcHalfWidth = (npcData.halfWidth || 0.9) + 0.04;
+                const sat = computeObbCollision2D(
+                    playerBoxCenterX,
+                    playerBoxCenterZ,
+                    playerYaw,
+                    playerHalfLength,
+                    playerHalfWidth,
+                    npc.position.x,
+                    npc.position.z,
+                    npc.rotation.y,
+                    npcHalfLength,
+                    npcHalfWidth
+                );
+
+                if (sat.hit) {
+                    const nx = sat.nx; // Dari NPC ke Pemain
+                    const nz = sat.nz;
+                    const penetration = sat.penetration;
+                    const npcYaw = npc.rotation.y - (npcData.yawOffset || 0);
+                    const roadFwdX = -Math.sin(npcYaw);
+                    const roadFwdZ = -Math.cos(npcYaw);
+                    const roadRightX = Math.cos(npcYaw);
+                    const roadRightZ = -Math.sin(npcYaw);
+
+                    const npcVelX = roadFwdX * (npcData.speed || 0) + roadRightX * (npcData.lateralVelocity || 0);
+                    const npcVelZ = roadFwdZ * (npcData.speed || 0) + roadRightZ * (npcData.lateralVelocity || 0);
+                    const relVx = velocityX - npcVelX;
+                    const relVz = velocityZ - npcVelZ;
+                    const vNormal = relVx * nx + relVz * nz;
+
+                    // Tabrakan frontal/belakang berkecepatan relatif sangat tinggi tetap Game Over
+                    if (-vNormal > 16.5) {
+                        cameraShakeIntensity = 0.55;
+                        triggerGameOver();
+                        break;
+                    }
+
+                    if (npcData.isPolice) {
+                        npcData.policeState = 'chase';
+                        npcData.chaseCalmTimer = 0;
+                    }
+
+                    // 1. Pisahkan posisi secara presisi sesuai rasio massa agar bodi TIDAK clipping
+                    const npcMass = npcData.mass || 1450;
+                    const invPlayerMass = 1 / playerMass;
+                    const invNpcMass = 1 / npcMass;
+                    const totalInvMass = invPlayerMass + invNpcMass;
+                    const playerShare = invPlayerMass / totalInvMass;
+                    const npcShare = invNpcMass / totalInvMass;
+
+                    const separation = penetration + 0.008;
+                    const npcMoveX = -nx * separation * npcShare;
+                    const npcMoveZ = -nz * separation * npcShare;
+                    const npcShiftFwd = npcMoveX * roadFwdX + npcMoveZ * roadFwdZ;
+                    const npcShiftLat = npcMoveX * roadRightX + npcMoveZ * roadRightZ;
+
+                    npcData.progress = (npcData.progress + npcShiftFwd / trackLength + 1) % 1;
+                    const desiredLatPos = (npcData.lateralPos !== undefined ? npcData.lateralPos : npcData.lane) + npcShiftLat;
+                    const clampedLatPos = THREE.MathUtils.clamp(desiredLatPos, -6.75, 6.75);
+                    const leftoverLat = desiredLatPos - clampedLatPos;
+                    npcData.lateralPos = clampedLatPos;
+
+                    placeOnTrack(npc, npcData.progress, clampedLatPos);
+                    npc.rotation.y += npcData.yawOffset;
+                    npc.rotation.z = npcData.rollOffset;
+
+                    playerX += nx * separation * playerShare + roadRightX * (-leftoverLat);
+                    playerZ += nz * separation * playerShare + roadRightZ * (-leftoverLat);
+
+                    // 2. Resolusi kecepatan normal (inelastis) + efek kedorong & hilang traksi ban NPC
+                    if (vNormal < 0) {
+                        const closingSpeed = -vNormal;
+                        const restitution = 0.06;
+                        const j = (1 + restitution) * closingSpeed / totalInvMass;
+
+                        const playerDeltaV = j * invPlayerMass;
+                        velocityX += nx * playerDeltaV;
+                        velocityZ += nz * playerDeltaV;
+
+                        const npcDeltaV = j * invNpcMass;
+                        const npcPushX = -nx * npcDeltaV;
+                        const npcPushZ = -nz * npcDeltaV;
+                        const pushFwd = npcPushX * roadFwdX + npcPushZ * roadFwdZ;
+                        const pushLat = npcPushX * roadRightX + npcPushZ * roadRightZ;
+
+                        const npcMaxSpd = npcData.isPolice && npcData.policeState === 'chase' ? 65 : 42;
+                        npcData.speed = THREE.MathUtils.clamp(npcData.speed + pushFwd, 4, npcMaxSpd);
+                        npcData.lateralVelocity = THREE.MathUtils.clamp(npcData.lateralVelocity + pushLat, -14, 14);
+                        npcData.pushedTimer = Math.max(npcData.pushedTimer || 0, 1.1);
+                        npcData.controlLossTimer = Math.max(
+                            npcData.controlLossTimer || 0,
+                            Math.min(1.5, 0.35 + closingSpeed * 0.09)
+                        );
+                        if (closingSpeed > 1.5) {
+                            npcData.skidIntensity = Math.max(
+                                npcData.skidIntensity || 0,
+                                THREE.MathUtils.clamp(closingSpeed / 8, 0.25, 1)
+                            );
+                        }
+
+                        // Torsi yaw realistis berdasarkan titik benturan depan/belakang (efek PIT maneuver)
+                        const relNpcX = playerBoxCenterX - npc.position.x;
+                        const relNpcZ = playerBoxCenterZ - npc.position.z;
+                        const contactFwdOffset = THREE.MathUtils.clamp(
+                            relNpcX * roadFwdX + relNpcZ * roadFwdZ,
+                            -npcHalfLength,
+                            npcHalfLength
+                        );
+                        const contactLatOffset = THREE.MathUtils.clamp(
+                            relNpcX * roadRightX + relNpcZ * roadRightZ,
+                            -npcHalfWidth,
+                            npcHalfWidth
+                        );
+                        const pitTorque = contactFwdOffset * (-pushLat) + contactLatOffset * pushFwd;
+                        npcData.yawVelocity += THREE.MathUtils.clamp(pitTorque * 0.32, -2.4, 2.4);
+
+                        const latPushFactor = Math.min(1, closingSpeed / 12);
+                        if (closingSpeed > 1.8) {
+                            const sideSign = Math.sign(pushLat) || Math.sign(nx * roadRightX + nz * roadRightZ) || 1;
+                            npcData.rollVelocity += sideSign * latPushFactor * 1.15;
+                            bodyRollVelocity += -sideSign * latPushFactor * 0.7;
+                        }
+
+                        if (closingSpeed > 4.2 && (!npcData.hitCooldown || npcData.hitCooldown <= 0)) {
+                            playCrashSound();
+                            cameraShakeIntensity = Math.max(
+                                cameraShakeIntensity,
+                                Math.min(0.28, 0.06 + closingSpeed * 0.016)
+                            );
+                            npcData.hitCooldown = 0.32;
+                        }
+                    }
+
+                    // 3. Gesekan Grinding (seretan samping & transfer dorongan saat bersinggungan)
+                    const tangentX = -nz;
+                    const tangentZ = nx;
+                    const relTangent = (velocityX - npcVelX) * tangentX + (velocityZ - npcVelZ) * tangentZ;
+                    const absRelTangent = Math.abs(relTangent);
+                    if (absRelTangent > 0.35) {
+                        const grindFriction = Math.min(absRelTangent * 0.5, 4.8 * dt);
+                        const grindSign = Math.sign(relTangent);
+                        velocityX -= tangentX * grindSign * grindFriction;
+                        velocityZ -= tangentZ * grindSign * grindFriction;
+
+                        const npcGrindPush = grindFriction * (playerMass / npcMass) * 0.55;
+                        const npcGrindFwd = (tangentX * grindSign * npcGrindPush) * roadFwdX +
+                            (tangentZ * grindSign * npcGrindPush) * roadFwdZ;
+                        const npcGrindLat = (tangentX * grindSign * npcGrindPush) * roadRightX +
+                            (tangentZ * grindSign * npcGrindPush) * roadRightZ;
+                        const npcMaxSpd = npcData.isPolice && npcData.policeState === 'chase' ? 65 : 42;
+                        npcData.speed = THREE.MathUtils.clamp(npcData.speed + npcGrindFwd, 4, npcMaxSpd);
+                        npcData.lateralVelocity = THREE.MathUtils.clamp(npcData.lateralVelocity + npcGrindLat, -14, 14);
+                        npcData.pushedTimer = Math.max(npcData.pushedTimer || 0, 0.7);
+                        npcData.controlLossTimer = Math.max(npcData.controlLossTimer || 0, 0.35);
+                        npcData.skidIntensity = Math.max(
+                            npcData.skidIntensity || 0,
+                            THREE.MathUtils.clamp(absRelTangent / 12, 0.2, 0.85)
+                        );
+
+                        // Sedikit tarikan setir ke arah gesekan bodi saat grinding
+                        const sideDot = nx * playerRightX + nz * playerRightZ;
+                        yawRate += -Math.sign(sideDot || 1) * Math.min(0.35, absRelTangent * 0.025) * dt * 12;
+
+                        const scrapeLevel = THREE.MathUtils.clamp(absRelTangent / 14, 0.18, 1);
+                        frameScrapeIntensity = Math.max(frameScrapeIntensity, scrapeLevel);
+                        cameraShakeIntensity = Math.max(cameraShakeIntensity, 0.022 + scrapeLevel * 0.045);
+                    }
+
+                    npcData.nearMissed = true;
+                    continue;
+                }
+
                 const relativeX = npc.position.x - playerX;
                 const relativeZ = npc.position.z - playerZ;
                 const longitudinalOffset = Math.abs(relativeX * forwardX + relativeZ * forwardZ);
-                const lateralOffset = Math.abs(relativeX * Math.cos(playerYaw) - relativeZ * Math.sin(playerYaw));
-                const npcHalfLength = npc.userData.halfLength || 2.0;
-                const npcHalfWidth = npc.userData.halfWidth || 0.9;
-                const sameRoadLevel = Math.abs(playerY - npc.position.y) < 2;
+                const lateralOffset = Math.abs(relativeX * playerRightX + relativeZ * playerRightZ);
 
                 if (
-                    sameRoadLevel &&
-                    longitudinalOffset < playerHalfLength + npcHalfLength &&
-                    lateralOffset < playerHalfWidth + npcHalfWidth
-                ) {
-                    triggerGameOver();
-                    break;
-                }
-
-                if (
-                    sameRoadLevel &&
-                    !npc.userData.nearMissed &&
+                    !npcData.nearMissed &&
                     Math.abs(carSpeed) > 12 &&
                     longitudinalOffset < playerHalfLength + npcHalfLength + 0.6 &&
                     lateralOffset < playerHalfWidth + npcHalfWidth + 1.1
                 ) {
-                    npc.userData.nearMissed = true;
+                    npcData.nearMissed = true;
                     bonusScore += 25;
                     playNearMissSound();
                     const toast = document.getElementById('near-miss-toast');
@@ -438,14 +810,27 @@
                         nearMissBannerTimer = 1.1;
                     }
                 }
+            }
+            activeScrapeIntensity = frameScrapeIntensity;
+            updateNpcSkidmarks();
+            flushSkidmarksUpload();
 
-                // Hapus NPC yang sudah dilewati pemain.
-                const distanceBehind = ((playerTrackProgress - npc.userData.progress + 1) % 1) * trackLength;
-                if (distanceBehind < 20) {
-                    scene.remove(npc);
-                    trafficCars.splice(i, 1);
+            // Jaga agar pemain tidak terdorong menembus pembatas jalan setelah resolusi tumbukan NPC
+            const postCollisionRoad = findNearestRoadPoint(playerX, playerY, playerZ, lastPlayerSegmentIndex);
+            if (postCollisionRoad && postCollisionRoad.horizontalDistance > 7.1 && postCollisionRoad.verticalDistance <= 3.5) {
+                const dist = postCollisionRoad.horizontalDistance || 1;
+                const clampNx = (playerX - postCollisionRoad.x) / dist;
+                const clampNz = (playerZ - postCollisionRoad.z) / dist;
+                playerX = postCollisionRoad.x + clampNx * 7.1;
+                playerZ = postCollisionRoad.z + clampNz * 7.1;
+                const outV = velocityX * clampNx + velocityZ * clampNz;
+                if (outV > 0) {
+                    velocityX -= outV * clampNx * 1.05;
+                    velocityZ -= outV * clampNz * 1.05;
                 }
             }
+            playerCar.position.x = playerX;
+            playerCar.position.z = playerZ;
 
             renderer.render(scene, camera);
         }
@@ -453,8 +838,10 @@
         function triggerGameOver() {
             if (isGameOver) return;
             isGameOver = true;
+            activeScrapeIntensity = 0;
             cameraShakeIntensity = 0.45;
             updateGameAudio(0, 1000, 6000, 0, false, false, selectedVehicleType, false);
+            stopPoliceVoice();
             playCrashSound();
             resetInputs();
 
@@ -489,12 +876,14 @@
             lastPlayerSegmentIndex = -1;
             cameraShakeIntensity = 0;
             nearMissBannerTimer = 0;
+            activeScrapeIntensity = 0;
             resetInputs();
+            stopPoliceVoice();
             resetPlayerPosition();
+            clearSkidmarks();
 
-            // Bersihkan sisa mobil NPC
-            trafficCars.forEach(npc => scene.remove(npc));
-            trafficCars = [];
+            // Siapkan ulang seluruh 240 mobil NPC langsung sejak awal
+            populateInitialTraffic();
 
             const toast = document.getElementById('near-miss-toast');
             if (toast) toast.hidden = true;
@@ -507,8 +896,109 @@
             document.getElementById('speed-value').innerText = '0';
             document.getElementById('rpm-value').innerText = Math.round(engineRpm);
             document.getElementById('gear-value').innerText = currentGear;
+            const speedBarFill = document.getElementById('speed-bar-fill');
+            if (speedBarFill) speedBarFill.style.width = '0%';
+            const rpmBarFill = document.getElementById('rpm-bar-fill');
+            if (rpmBarFill) rpmBarFill.style.width = '0%';
+            const gasMeterFill = document.getElementById('gas-meter-fill');
+            if (gasMeterFill) gasMeterFill.style.height = '0%';
+            const brakeMeterFill = document.getElementById('brake-meter-fill');
+            if (brakeMeterFill) brakeMeterFill.style.height = '0%';
+            const handbrakeMeterFill = document.getElementById('handbrake-meter-fill');
+            if (handbrakeMeterFill) handbrakeMeterFill.style.height = '0%';
+            const steerDot = document.getElementById('steer-indicator-dot');
+            if (steerDot) steerDot.style.left = '50%';
+            const steerIcon = document.getElementById('steering-wheel-icon');
+            if (steerIcon) steerIcon.style.transform = 'rotate(0deg)';
             clock.getDelta();
             animate();
+        }
+
+        async function exitToHome() {
+            if (!hasStarted && !isGameOver) return;
+            const wasGameOver = isGameOver;
+            hasStarted = false;
+            isGameOver = false;
+            isCameraDragging = false;
+            carSpeed = 0;
+            yawRate = 0;
+            bodyRoll = 0;
+            bodyRollVelocity = 0;
+            bodyPitch = 0;
+            bodyPitchVelocity = 0;
+            motorcyclePitch = 0;
+            motorcyclePitchVelocity = 0;
+            velocityX = 0;
+            velocityZ = 0;
+            verticalVelocity = 0;
+            isAirborne = false;
+            chassisSuspensionOffset = 0;
+            longitudinalAcceleration = 0;
+            lateralAcceleration = 0;
+            nearMissBannerTimer = 0;
+            cameraShakeIntensity = 0;
+            maxTireSkid = 0;
+            activeScrapeIntensity = 0;
+            playerRoadLateral = 0;
+            resetInputs();
+            clearSkidmarks();
+
+            updateGameAudio(0, 1000, 6000, 0, false, false, selectedVehicleType, false);
+            stopPoliceVoice();
+
+            if (playerCar) {
+                scene.remove(playerCar);
+                playerCar = null;
+            }
+            playerWheelPivots = [];
+            clearTrafficCars();
+
+            const toast = document.getElementById('near-miss-toast');
+            if (toast) toast.hidden = true;
+            const newRecordBadge = document.getElementById('new-record-badge');
+            if (newRecordBadge) newRecordBadge.hidden = true;
+            const controlsHint = document.getElementById('controls-hint');
+            if (controlsHint) controlsHint.hidden = true;
+            const controlsToggle = document.getElementById('controls-toggle');
+            if (controlsToggle) {
+                controlsToggle.setAttribute('aria-expanded', 'false');
+                controlsToggle.setAttribute('aria-label', 'Tampilkan petunjuk kontrol');
+            }
+            document.getElementById('game-over').style.display = 'none';
+            document.body.classList.remove('game-active');
+            document.body.classList.add('vehicle-selection-open');
+            document.getElementById('vehicle-selection').hidden = false;
+            isVehicleSelectionOpen = true;
+
+            updateVehicleSelection(selectedVehicleType);
+
+            if (wasGameOver) {
+                clock.getDelta();
+                animate();
+            }
+
+            const missingTypes = ['car', 'motorcycle'].filter(type => !previewVehicleModels[type]);
+            await Promise.all(missingTypes.map(async type => {
+                const isCar = type === 'car';
+                try {
+                    const model = await loadDetailedVehicleModel(
+                        isCar ? 'assets/toyota-innova-zenix-2023/model.dae' : 'assets/yamaha-nmax-neo-155/model.dae',
+                        isCar ? 'Innova Zenix' : 'Yamaha NMAX 155 Neo',
+                        type,
+                        selectedVehicleColor
+                    );
+                    if (previewVehicleModels[type]) return;
+                    previewVehicleModels[type] = model;
+                    previewVehiclePivots[type] = new THREE.Group();
+                    previewVehiclePivots[type].add(model);
+                    setVehicleColor(selectedVehicleColor);
+                    if (!hasStarted && isVehicleSelectionOpen && selectedVehicleType === type) {
+                        updateVehicleSelection(type);
+                    }
+                } catch (error) {
+                    console.warn('Gagal memuat ulang preview kendaraan:', error);
+                }
+            }));
         }
 
         // Mulai Game

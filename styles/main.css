@@ -16,9 +16,10 @@
             user-select: none;
         }
         #dashboard {
-            position: absolute;
-            right: 30px;
-            bottom: 30px;
+            position: fixed;
+            right: 24px;
+            bottom: 24px;
+            z-index: 5;
             display: flex;
             flex-direction: column;
             align-items: flex-end;
@@ -27,39 +28,226 @@
             pointer-events: none;
             font-family: 'Broken15', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
+        .dashboard-stats {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            margin-bottom: 6px;
+        }
         .stat {
-            font-size: 18px;
-            margin-bottom: 8px;
+            font-size: 17px;
+            margin-bottom: 4px;
             text-align: right;
         }
+        .stat-best {
+            font-size: 13px;
+            color: #cfd5df;
+            margin-bottom: 4px;
+        }
         #speedometer {
-            background: rgba(0, 0, 0, 0.6);
-            border: 2px solid #ffcc00;
-            padding: 15px 25px;
-            border-radius: 10px;
+            width: 236px;
+            box-sizing: border-box;
+            background: rgba(8, 10, 16, 0.82);
+            backdrop-filter: blur(8px);
+            border: 1.5px solid rgba(255, 204, 0, 0.78);
+            padding: 14px 16px;
+            border-radius: 12px;
             color: white;
-            text-align: center;
             pointer-events: none;
-            box-shadow: 0 0 20px rgba(255, 204, 0, 0.3);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55), 0 0 20px rgba(255, 204, 0, 0.16);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .cluster-top {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .speed-block {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
         }
         #speed-value {
+            font-family: 'Broken15', 'Segoe UI', sans-serif;
             font-size: 42px;
+            line-height: 0.95;
+            font-weight: bold;
+            color: #ffcc00;
+            font-variant-numeric: tabular-nums;
+        }
+        #speed-unit {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            color: #9fa6b2;
+        }
+        .gear-block {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 46px;
+            padding: 4px 8px;
+            border: 1px solid rgba(255, 204, 0, 0.45);
+            border-radius: 7px;
+            background: rgba(255, 204, 0, 0.1);
+        }
+        #gear-label {
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            color: #cfd5df;
+        }
+        #gear-value {
+            font-family: 'Broken15', 'Segoe UI', sans-serif;
+            font-size: 20px;
+            line-height: 1.05;
             font-weight: bold;
             color: #ffcc00;
         }
-        #speed-unit {
-            font-size: 14px;
-            color: #aaa;
+        .speed-bar-track {
+            margin-top: 8px;
+            height: 5px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.12);
+            overflow: hidden;
+        }
+        #speed-bar-fill {
+            width: 0%;
+            height: 100%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #ffe066, #ff9f1a);
+            transition: width 0.06s linear;
+        }
+        .rpm-section {
+            margin-top: 10px;
         }
         #engine-readout {
-            margin-top: 5px;
-            color: #ddd;
-            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 4px;
+            color: #d7dce5;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
         }
-        .stat-best {
-            font-size: 14px;
-            color: #cfd5df;
-            margin-bottom: 10px;
+        #rpm-value {
+            font-variant-numeric: tabular-nums;
+            color: #ffffff;
+        }
+        .rpm-bar-track {
+            height: 7px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.12);
+            overflow: hidden;
+        }
+        #rpm-bar-fill {
+            width: 0%;
+            height: 100%;
+            border-radius: 4px;
+            background: linear-gradient(90deg, #48dbfb 0%, #ffcc00 68%, #ff4757 100%);
+            transition: width 0.05s linear;
+        }
+        .telemetry-row {
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .steering-meter {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .steering-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .telemetry-label,
+        .pedal-label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            color: #9fa6b2;
+        }
+        #steering-wheel-icon {
+            width: 26px;
+            height: 26px;
+            color: #ffcc00;
+            transform: rotate(0deg);
+            transform-origin: center;
+        }
+        .steer-track {
+            position: relative;
+            height: 8px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.12);
+        }
+        .steer-center-mark {
+            position: absolute;
+            left: 50%;
+            top: 1px;
+            bottom: 1px;
+            width: 2px;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.35);
+        }
+        #steer-indicator-dot {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ffcc00;
+            border: 2px solid #0b0d14;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 8px rgba(255, 204, 0, 0.7);
+        }
+        .pedals-meter {
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+        }
+        .pedal-gauge {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .pedal-bar-track {
+            position: relative;
+            width: 14px;
+            height: 44px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            overflow: hidden;
+            display: flex;
+            align-items: flex-end;
+        }
+        .pedal-fill {
+            width: 100%;
+            height: 0%;
+            border-radius: 2px;
+        }
+        .pedal-fill-gas {
+            background: linear-gradient(0deg, #22c55e, #a3e635);
+            box-shadow: 0 0 10px rgba(34, 197, 94, 0.55);
+        }
+        .pedal-fill-brake {
+            background: linear-gradient(0deg, #dc2626, #ff6b6b);
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.55);
+        }
+        .pedal-fill-handbrake {
+            background: linear-gradient(0deg, #ea580c, #fbbf24);
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
         }
         #near-miss-toast {
             margin-bottom: 10px;
@@ -72,9 +260,10 @@
             letter-spacing: 0.05em;
         }
         #controls-hint {
-            position: absolute;
+            position: fixed;
             bottom: 70px;
             left: 20px;
+            z-index: 5;
             background: rgba(0, 0, 0, 0.78);
             padding: 10px 15px;
             border-radius: 8px;
@@ -113,6 +302,37 @@
         #audio-toggle:focus-visible {
             background: #ffcc00;
             color: #111;
+        }
+        #exit-game {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 16;
+            padding: 8px 14px;
+            border: 1px solid rgba(255, 204, 0, 0.72);
+            border-radius: 8px;
+            background: rgba(8, 10, 16, 0.78);
+            backdrop-filter: blur(8px);
+            color: #ffcc00;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            cursor: pointer;
+            transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+        }
+        #exit-game:hover,
+        #exit-game:focus-visible {
+            background: #ffcc00;
+            color: #111;
+        }
+        @media (pointer: coarse), (max-width: 768px) {
+            #exit-game {
+                top: 14px;
+                left: 14px;
+                padding: 7px 11px;
+                font-size: 11px;
+            }
         }
         #new-record-badge {
             display: inline-block;
@@ -165,6 +385,12 @@
         .touch-btn-brake {
             border-color: rgba(255, 92, 92, 0.75);
         }
+        .touch-btn-handbrake {
+            min-width: 48px;
+            font-size: 13px;
+            border-color: rgba(245, 158, 11, 0.8);
+            color: #fde68a;
+        }
         .touch-btn.is-active {
             background: rgba(255, 204, 0, 0.85);
             color: #111;
@@ -172,23 +398,126 @@
         @media (pointer: coarse), (max-width: 768px) {
             body.game-active #touch-controls {
                 display: flex;
+                inset: auto 12px 112px 12px;
+            }
+            .touch-cluster {
+                gap: 6px;
+            }
+            .touch-btn {
+                min-width: 48px;
+                height: 50px;
+                font-size: 13px;
+            }
+            .touch-btn-small,
+            .touch-btn-handbrake {
+                min-width: 42px;
+                font-size: 11px;
+            }
+            #hud-actions {
+                left: 12px;
+                bottom: 14px;
+                gap: 6px;
+            }
+            #controls-toggle,
+            #audio-toggle {
+                width: 32px;
+                height: 32px;
+                font-size: 15px;
             }
             #dashboard {
-                right: 16px;
-                top: 16px;
-                bottom: auto;
+                right: auto;
+                left: 50%;
+                top: auto;
+                bottom: 10px;
+                transform: translateX(-50%);
+                align-items: center;
+            }
+            .dashboard-stats {
+                flex-direction: row;
+                align-items: center;
+                gap: 10px;
+                margin-bottom: 4px;
+            }
+            .stat {
+                font-size: 11px;
+                margin-bottom: 0;
+                text-align: center;
+            }
+            .stat-best {
+                font-size: 10px;
+                margin-bottom: 0;
             }
             #speedometer {
-                padding: 10px 16px;
+                width: 184px;
+                padding: 8px 10px;
+                border-radius: 10px;
             }
             #speed-value {
-                font-size: 30px;
+                font-size: 26px;
+            }
+            #speed-unit {
+                font-size: 9px;
+            }
+            .gear-block {
+                min-width: 34px;
+                padding: 2px 6px;
+            }
+            #gear-label {
+                font-size: 8px;
+            }
+            #gear-value {
+                font-size: 15px;
+            }
+            .speed-bar-track {
+                margin-top: 5px;
+                height: 4px;
+            }
+            .rpm-section {
+                margin-top: 6px;
+            }
+            #engine-readout {
+                font-size: 9px;
+                margin-bottom: 3px;
+            }
+            .rpm-bar-track {
+                height: 5px;
+            }
+            .telemetry-row {
+                margin-top: 7px;
+                padding-top: 6px;
+                gap: 8px;
+            }
+            .steering-meter {
+                gap: 5px;
+            }
+            .telemetry-label,
+            .pedal-label {
+                font-size: 8px;
+            }
+            #steering-wheel-icon {
+                width: 19px;
+                height: 19px;
+            }
+            .steer-track {
+                height: 6px;
+            }
+            #steer-indicator-dot {
+                width: 9px;
+                height: 9px;
+            }
+            .pedals-meter {
+                gap: 6px;
+            }
+            .pedal-bar-track {
+                width: 10px;
+                height: 28px;
             }
         }
         #game-over {
-            position: absolute;
+            position: fixed;
             top: 50%;
             left: 50%;
+            z-index: 15;
             transform: translate(-50%, -50%);
             background: rgba(20, 20, 20, 0.95);
             padding: 40px;
@@ -318,10 +647,6 @@
             outline: 2px solid #ffcc00;
             outline-offset: 3px;
         }
-        #start-button {
-            width: 100%;
-            margin-top: 23px;
-        }
         #loading-screen {
             position: fixed;
             inset: 0;
@@ -386,6 +711,7 @@
             z-index: 0;
         }
         body:not(.game-active) #dashboard,
+        body:not(.game-active) #exit-game,
         body:not(.game-active) #hud-actions,
         body:not(.game-active) #controls-hint,
         body:not(.game-active) #touch-controls {
@@ -401,28 +727,39 @@
         }
         .loading-card {
             display: flex;
-            width: min(660px, 100%);
+            width: min(820px, 100%);
             min-height: 65vh;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 38px;
+            padding: 32px;
             border: 0;
             background: transparent;
             box-shadow: none;
         }
         .game-logo {
             display: block;
-            width: min(520px, 86vw);
-            max-height: 38vh;
+            width: min(720px, 90vw);
+            max-height: 48vh;
             object-fit: contain;
-            margin-bottom: 32px;
+            margin-bottom: 12px;
             filter: drop-shadow(0 10px 32px rgba(0, 0, 0, .45));
+        }
+        .loading-progress-corner {
+            position: fixed;
+            right: 24px;
+            bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
+            max-width: min(260px, calc(100vw - 48px));
+            pointer-events: none;
         }
         .loading-ring {
             position: relative;
-            width: 58px;
-            height: 58px;
+            width: 36px;
+            height: 36px;
         }
         .loading-ring svg {
             width: 100%;
@@ -431,7 +768,7 @@
         }
         .loading-ring circle {
             fill: none;
-            stroke-width: 7;
+            stroke-width: 8;
         }
         .loading-ring-track { stroke: rgba(255, 255, 255, .16); }
         #loading-ring-progress {
@@ -448,16 +785,20 @@
             place-items: center;
             color: #fff;
             font-family: 'Segoe UI', sans-serif;
-            font-size: 12px;
+            font-size: 10px;
+            font-weight: 600;
         }
         #loading-message {
-            margin: 18px 0 0;
+            min-height: 0;
+            margin: 0;
             color: #c4c8d0;
-            font-size: 15px;
+            font-size: 12px;
+            line-height: 1.35;
+            text-align: right;
         }
         .start-prompt {
-            margin-top: 24px;
-            padding: 10px 14px;
+            margin-top: 6px;
+            padding: 8px 14px;
             border: 0;
             background: transparent;
             color: #ffcc00;
@@ -483,9 +824,9 @@
         }
         .selection-brand {
             position: absolute;
-            top: 5vh;
-            left: 5vw;
-            width: min(300px, 30vw);
+            top: 24px;
+            left: 28px;
+            width: min(150px, 16vw);
             animation: logo-arrive .7s cubic-bezier(.2,.8,.2,1) both;
             pointer-events: auto;
         }
@@ -493,6 +834,43 @@
         @keyframes logo-arrive {
             from { opacity: 0; transform: translateX(45px); }
             to { opacity: 1; transform: translateX(0); }
+        }
+        .brand-selector {
+            position: absolute;
+            top: 4vh;
+            left: 38%;
+            right: 5vw;
+            z-index: 2;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            pointer-events: none;
+        }
+        .brand-tab {
+            pointer-events: auto;
+            min-width: 112px;
+            padding: 9px 18px;
+            border: 1px solid rgba(255, 255, 255, .28);
+            border-radius: 6px;
+            background: rgba(12, 14, 20, .65);
+            backdrop-filter: blur(6px);
+            color: #cfd5df;
+            font: inherit;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: .14em;
+            cursor: pointer;
+            transition: .2s ease;
+        }
+        .brand-tab:hover {
+            border-color: rgba(255, 204, 0, .75);
+            color: #fff;
+        }
+        .brand-tab[aria-pressed="true"] {
+            border-color: #ffcc00;
+            background: rgba(255, 204, 0, .18);
+            color: #ffcc00;
+            box-shadow: 0 0 18px rgba(255, 204, 0, .2);
         }
         .vehicle-preview-copy {
             z-index: 1;
@@ -515,18 +893,81 @@
             line-height: 1;
             text-transform: uppercase;
         }
-        .vehicle-preview-copy .vehicle-note {
-            max-width: 290px;
-            line-height: 1.5;
+        .color-picker {
+            width: min(260px, 100%);
+            margin: 18px 0 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
-        .color-options {
-            gap: 13px;
-            margin: 24px 0 8px 4px;
+        .color-picker-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
         }
-        .color-swatch {
-            width: 27px;
-            height: 27px;
-            border-color: rgba(255, 255, 255, .58);
+        .color-picker-label {
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .16em;
+            color: #c4c8d0;
+        }
+        .color-preview-chip {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, .75);
+            background: #cc0000;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .45);
+        }
+        .slider-row {
+            display: grid;
+            grid-template-columns: 52px 1fr;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+        }
+        .slider-name {
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 12px;
+            color: #d7d9de;
+        }
+        .color-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 12px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, .32);
+            outline: none;
+            cursor: pointer;
+        }
+        .color-slider-hue {
+            background: linear-gradient(90deg, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%);
+        }
+        .color-slider-lightness {
+            background: linear-gradient(90deg, #0d0d0d 0%, hsl(0, 90%, 50%) 50%, #f2f2f2 100%);
+        }
+        .color-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #11131c;
+            box-shadow: 0 0 0 2px #ffcc00;
+            cursor: pointer;
+        }
+        .color-slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #11131c;
+            box-shadow: 0 0 0 2px #ffcc00;
+            cursor: pointer;
         }
         #choose-vehicle { min-width: 220px; }
         .vehicle-arrow {
@@ -568,24 +1009,30 @@
         }
         #plate-dialog::backdrop { background: rgba(0, 0, 0, .76); backdrop-filter: blur(7px); }
         #setup-form { width: auto; margin: 0; }
-        #setup-form h2 { margin: 10px 0 4px; color: #ffcc00; }
-        #setup-form .intro { margin-bottom: 18px; }
+        #setup-form h2 { margin: 0 0 16px; color: #ffcc00; }
         #player-name { box-sizing: border-box; }
-        #start-button { letter-spacing: .08em; }
-        .text-button {
-            display: block;
-            width: 100%;
-            margin-top: 12px;
-            padding: 8px;
-            border: 0;
-            background: transparent;
-            color: #b6bbc3;
-            font: inherit;
-            font-size: 12px;
-            cursor: pointer;
+        .plate-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 18px;
         }
-        .text-button:hover { color: #fff; }
-        #start-error { color: #ff8585; font-size: 13px; }
+        .plate-actions .btn {
+            flex: 1;
+            width: auto;
+            margin-top: 0;
+            padding: 12px 16px;
+        }
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            color: #e2e6ed;
+            border: 1px solid rgba(255, 255, 255, 0.28);
+        }
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.16);
+            color: #ffffff;
+        }
+        #start-button { letter-spacing: .04em; }
+        #start-error { color: #ff8585; font-size: 13px; margin: 10px 0 0; }
         @media (max-width: 700px) {
             #vehicle-selection {
                 grid-template-columns: 1fr;
@@ -593,15 +1040,21 @@
                 background: linear-gradient(0deg, rgba(5, 7, 11, .96) 0%, rgba(5, 7, 11, .76) 42%, rgba(5, 7, 11, .1) 78%);
             }
             .selection-brand {
-                top: 3vh;
-                left: 50%;
-                width: min(220px, 52vw);
-                transform: translateX(-50%);
-                animation-name: logo-arrive-mobile;
+                top: 16px;
+                left: 20px;
+                width: min(124px, 34vw);
+                transform: none;
+                animation-name: logo-arrive;
             }
-            @keyframes logo-arrive-mobile {
-                from { opacity: 0; transform: translate(-50%, 20px); }
-                to { opacity: 1; transform: translate(-50%, 0); }
+            .brand-selector {
+                top: 72px;
+                left: 20px;
+                right: 20px;
+            }
+            .brand-tab {
+                min-width: 96px;
+                padding: 7px 14px;
+                font-size: 12px;
             }
             .vehicle-preview-copy {
                 grid-column: 1;
@@ -612,5 +1065,6 @@
             #previous-vehicle { left: 4vw; top: 45%; }
             #next-vehicle { right: 4vw; top: 45%; }
             .vehicle-pagination { right: 8vw; bottom: 4vh; }
-            .game-logo { width: min(420px, 88vw); }
+            .game-logo { width: min(520px, 92vw); }
+            .loading-progress-corner { right: 16px; bottom: 14px; }
         }

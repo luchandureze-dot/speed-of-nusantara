@@ -43,8 +43,10 @@
                 cameraShakeIntensity = 0;
                 nearMissBannerTimer = 0;
                 resetInputs();
+                clearSkidmarks();
                 await createPlayerCar(selectedVehicleType, selectedVehicleColor, playerName);
                 configureTireLayout();
+                populateInitialTraffic();
                 currentGear = 1;
                 engineRpm = vehiclePhysicsConfigs[selectedVehicleType].idleRpm;
                 document.getElementById('score').innerText = '0';
@@ -54,6 +56,7 @@
                     selectedVehicleType === 'motorcycle' ? 'RASIO' : 'GIGI';
                 document.getElementById('gear-value').innerText = currentGear;
                 hasStarted = true;
+                isVehicleSelectionOpen = false;
                 isLoadingVehicle = false;
                 document.getElementById('plate-dialog').close();
                 document.getElementById('vehicle-selection').hidden = true;

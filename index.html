@@ -9,13 +9,70 @@
 <body>
 
     <div id="dashboard">
-        <div class="stat">Skor Jarak: <span id="score">0</span> m</div>
-        <div class="stat stat-best">Rekor: <span id="best-score">0</span> m</div>
+        <div class="dashboard-stats">
+            <div class="stat">Skor Jarak: <span id="score">0</span> m</div>
+            <div class="stat stat-best">Rekor: <span id="best-score">0</span> m</div>
+        </div>
         <div id="near-miss-toast" hidden>+25 m SALIP TIPIS!</div>
-        <div id="speedometer">
-            <div id="speed-value">0</div>
-            <div id="speed-unit">KM/H</div>
-            <div id="engine-readout">RPM <span id="rpm-value">1000</span> · <span id="gear-label">GIGI</span> <span id="gear-value">1</span></div>
+        <div id="speedometer" aria-label="Panel instrumen kendaraan">
+            <div class="cluster-top">
+                <div class="speed-block">
+                    <div id="speed-value">0</div>
+                    <div id="speed-unit">KM/H</div>
+                </div>
+                <div class="gear-block">
+                    <span id="gear-label">GIGI</span>
+                    <span id="gear-value">1</span>
+                </div>
+            </div>
+            <div class="speed-bar-track" aria-hidden="true">
+                <div id="speed-bar-fill"></div>
+            </div>
+            <div class="rpm-section">
+                <div id="engine-readout">
+                    <span class="rpm-label">RPM</span>
+                    <span id="rpm-value">1000</span>
+                </div>
+                <div class="rpm-bar-track" aria-hidden="true">
+                    <div id="rpm-bar-fill"></div>
+                </div>
+            </div>
+            <div class="telemetry-row">
+                <div class="steering-meter" aria-label="Indikator kemudi">
+                    <div class="steering-header">
+                        <span class="telemetry-label">STEER</span>
+                        <svg id="steering-wheel-icon" viewBox="0 0 32 32" aria-hidden="true">
+                            <circle cx="16" cy="16" r="12" fill="none" stroke="currentColor" stroke-width="2.6"/>
+                            <circle cx="16" cy="16" r="3.2" fill="currentColor"/>
+                            <path d="M5 15h8M19 15h8M16 19v9" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <div class="steer-track" aria-hidden="true">
+                        <span class="steer-center-mark"></span>
+                        <span id="steer-indicator-dot"></span>
+                    </div>
+                </div>
+                <div class="pedals-meter" aria-label="Indikator pedal gas, rem, dan rem tangan">
+                    <div class="pedal-gauge">
+                        <div class="pedal-bar-track" aria-hidden="true">
+                            <div id="handbrake-meter-fill" class="pedal-fill pedal-fill-handbrake"></div>
+                        </div>
+                        <span class="pedal-label">HB</span>
+                    </div>
+                    <div class="pedal-gauge">
+                        <div class="pedal-bar-track" aria-hidden="true">
+                            <div id="brake-meter-fill" class="pedal-fill pedal-fill-brake"></div>
+                        </div>
+                        <span class="pedal-label">REM</span>
+                    </div>
+                    <div class="pedal-gauge">
+                        <div class="pedal-bar-track" aria-hidden="true">
+                            <div id="gas-meter-fill" class="pedal-fill pedal-fill-gas"></div>
+                        </div>
+                        <span class="pedal-label">GAS</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -23,10 +80,12 @@
         <b>W / Panah Atas:</b> Gas<br>
         <b>S / Panah Bawah:</b> Rem / Mundur<br>
         <b>A D / Panah Kiri Kanan:</b> Belok / Pindah Lajur<br>
+        <b>Spasi:</b> Rem Tangan (Kunci Ban Belakang)<br>
         <b>C:</b> Ganti Kamera<br>
         <b>Klik kiri + drag:</b> Putar Kamera (lepas untuk kembali netral)<br>
         <b>Scroll:</b> Zoom In / Out
     </div>
+    <button id="exit-game" type="button" aria-label="Keluar game dan kembali ke beranda">← HOME</button>
     <div id="hud-actions">
         <button id="controls-toggle" type="button" aria-controls="controls-hint"
                 aria-expanded="false" aria-label="Tampilkan petunjuk kontrol">i</button>
@@ -41,6 +100,7 @@
         </div>
         <div class="touch-cluster touch-pedals">
             <button id="touch-camera" class="touch-btn touch-btn-small" type="button" aria-label="Ganti kamera">CAM</button>
+            <button id="touch-handbrake" class="touch-btn touch-btn-handbrake" type="button" aria-label="Rem tangan">HB</button>
             <button id="touch-brake" class="touch-btn touch-btn-brake" type="button" aria-label="Rem atau mundur">REM</button>
             <button id="touch-gas" class="touch-btn touch-btn-gas" type="button" aria-label="Gas">GAS</button>
         </div>
@@ -58,17 +118,19 @@
     <div id="loading-screen" role="status" aria-live="polite" aria-busy="true">
         <div class="loading-card">
             <img class="game-logo" src="assets/speed-of-nusantara-logo.png" alt="Speed of Nusantara">
-            <div class="loading-ring" role="progressbar" aria-label="Progres pemuatan"
-                 aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-                <svg viewBox="0 0 100 100" aria-hidden="true">
-                    <circle class="loading-ring-track" cx="50" cy="50" r="44"></circle>
-                    <circle id="loading-ring-progress" cx="50" cy="50" r="44"></circle>
-                </svg>
-                <span id="loading-percent">0%</span>
-            </div>
-            <p id="loading-message">Memuat aset dan data...</p>
             <button id="loading-start" class="start-prompt" type="button" hidden>click anything to start</button>
             <button id="loading-retry" class="btn" type="button" hidden>COBA LAGI</button>
+            <div class="loading-progress-corner">
+                <div class="loading-ring" role="progressbar" aria-label="Progres pemuatan"
+                     aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <svg viewBox="0 0 100 100" aria-hidden="true">
+                        <circle class="loading-ring-track" cx="50" cy="50" r="44"></circle>
+                        <circle id="loading-ring-progress" cx="50" cy="50" r="44"></circle>
+                    </svg>
+                    <span id="loading-percent">0%</span>
+                </div>
+                <p id="loading-message">Memuat aset dan data...</p>
+            </div>
         </div>
     </div>
 
@@ -76,16 +138,26 @@
         <div class="selection-brand">
             <img src="assets/speed-of-nusantara-logo.png" alt="Speed of Nusantara">
         </div>
+        <div class="brand-selector" role="group" aria-label="Pilih merek kendaraan">
+            <button class="brand-tab" type="button" data-brand="toyota" aria-pressed="true">TOYOTA</button>
+            <button class="brand-tab" type="button" data-brand="yamaha" aria-pressed="false">YAMAHA</button>
+        </div>
         <div class="vehicle-preview-copy">
             <span class="eyebrow">PILIH KENDARAANMU</span>
             <h1 id="selected-vehicle-name">Innova Zenix</h1>
-            <p class="vehicle-note">Geser untuk memutar · pilih kendaraan untuk melihat dari semua sisi</p>
-            <div class="color-options" role="group" aria-label="Warna kendaraan">
-                <button class="color-swatch" type="button" data-color="#cc0000" aria-label="Merah" aria-pressed="true" style="background:#cc0000"></button>
-                <button class="color-swatch" type="button" data-color="#1769aa" aria-label="Biru" aria-pressed="false" style="background:#1769aa"></button>
-                <button class="color-swatch" type="button" data-color="#eeeeea" aria-label="Putih" aria-pressed="false" style="background:#eeeeea"></button>
-                <button class="color-swatch" type="button" data-color="#292d33" aria-label="Hitam" aria-pressed="false" style="background:#292d33"></button>
-                <button class="color-swatch" type="button" data-color="#e4ad20" aria-label="Kuning" aria-pressed="false" style="background:#e4ad20"></button>
+            <div class="color-picker" role="group" aria-label="Warna kendaraan">
+                <div class="color-picker-header">
+                    <span class="color-picker-label">WARNA CAT</span>
+                    <span id="color-preview-chip" class="color-preview-chip" aria-hidden="true"></span>
+                </div>
+                <label class="slider-row" for="color-hue">
+                    <span class="slider-name">Hue</span>
+                    <input id="color-hue" class="color-slider color-slider-hue" type="range" min="0" max="360" value="0" aria-label="Pilih warna dasar (Hue)">
+                </label>
+                <label class="slider-row" for="color-lightness">
+                    <span class="slider-name">Terang</span>
+                    <input id="color-lightness" class="color-slider color-slider-lightness" type="range" min="0" max="100" value="40" aria-label="Atur kecerahan warna">
+                </label>
             </div>
             <button id="choose-vehicle" class="btn" type="button">PILIH KENDARAAN</button>
         </div>
@@ -96,15 +168,14 @@
 
     <dialog id="plate-dialog" aria-labelledby="plate-title">
         <form id="setup-form">
-            <span class="eyebrow">SATU LANGKAH LAGI</span>
-            <h2 id="plate-title">Personalisasi kendaraanmu</h2>
-            <p class="intro">Nama ini akan tampil di plat nomor kendaraan.</p>
-            <label class="field-label" for="player-name">Nama untuk plat nomor</label>
+            <h2 id="plate-title">PLAT NOMOR</h2>
             <input id="player-name" name="playerName" type="text" maxlength="12"
-                   placeholder="Contoh: ARIEL" autocomplete="nickname" required>
+                   placeholder="Contoh: ARIEL" aria-label="PLAT NOMOR" autocomplete="nickname" required>
             <p id="start-error" role="alert" hidden></p>
-            <button id="start-button" class="btn" type="submit">START SPEEDING</button>
-            <button id="back-to-selection" class="text-button" type="button">KEMBALI PILIH KENDARAAN</button>
+            <div class="plate-actions">
+                <button id="back-to-selection" class="btn btn-secondary" type="button">Bentar dulu</button>
+                <button id="start-button" class="btn" type="submit">Gas Polll!</button>
+            </div>
         </form>
     </dialog>
 
@@ -115,6 +186,7 @@
     <script src="js/state.js"></script>
     <script src="js/audio.js"></script>
     <script src="js/world.js"></script>
+    <script src="js/skidmarks.js"></script>
     <script src="js/vehicle.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/traffic.js"></script>

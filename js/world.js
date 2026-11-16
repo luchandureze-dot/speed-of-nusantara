@@ -122,8 +122,8 @@
             road.receiveShadow = true;
             scene.add(road);
 
-            // Garis lajur yang mengikuti lengkungan jalan.
-            [-4.5, 4.5].forEach(offset => {
+            // Garis lajur yang mengikuti lengkungan jalan (3 lajur proporsional selebar 4,8 m: -7,2..-2,4 | -2,4..2,4 | 2,4..7,2).
+            [-2.4, 2.4].forEach(offset => {
                 const linePoints = [];
                 for (let i = 0; i <= trackResolution; i++) {
                     const t = i / trackResolution;
@@ -144,9 +144,9 @@
                 scene.add(line);
             });
 
-            // Garis bahu jalan solid di tepi kiri dan kanan tol.
+            // Garis bahu jalan solid di tepi kiri dan kanan tol (±7,2 m dari tengah, menyisakan 0,8 m tepi luar).
             const shoulderLineMaterial = new THREE.LineBasicMaterial({ color: 0xffcc33 });
-            [-7.3, 7.3].forEach(offset => {
+            [-7.2, 7.2].forEach(offset => {
                 const shoulderPoints = [];
                 for (let i = 0; i <= trackResolution; i++) {
                     const t = i / trackResolution;
@@ -359,14 +359,32 @@
                 scene.add(building);
             }
 
-            // Spawn NPC Lalu Lintas secara berkala
-            if (trafficSpawnTimer) clearInterval(trafficSpawnTimer);
-            trafficSpawnTimer = setInterval(spawnTrafficCar, 1500);
+            if (trafficSpawnTimer) {
+                clearInterval(trafficSpawnTimer);
+                trafficSpawnTimer = null;
+            }
             return roadTexturesReady;
         }
 
         function placeOnTrack(car, progress, lane) {
             const t = ((progress % 1) + 1) % 1;
+            if (roadSegments.length === trackResolution) {
+                const exactIndex = t * trackResolution;
+                const index = Math.floor(exactIndex) % trackResolution;
+                const frac = exactIndex - Math.floor(exactIndex);
+                const seg = roadSegments[index];
+                const px = seg.start.x + (seg.end.x - seg.start.x) * frac;
+                const py = seg.start.y + (seg.end.y - seg.start.y) * frac;
+                const pz = seg.start.z + (seg.end.z - seg.start.z) * frac;
+                const dx = seg.end.x - seg.start.x;
+                const dz = seg.end.z - seg.start.z;
+                const len = Math.hypot(dx, dz) || 1;
+                const tx = dx / len;
+                const tz = dz / len;
+                car.position.set(px - tz * lane, py, pz + tx * lane);
+                car.rotation.y = Math.atan2(-tx, -tz);
+                return;
+            }
             const point = trackCurve.getPointAt(t);
             const tangent = trackCurve.getTangentAt(t);
             car.position.set(
@@ -395,10 +413,15 @@
             const offsetX = x - roadX;
             const offsetY = y - roadY;
             const offsetZ = z - roadZ;
+            const horizontalSegLength = Math.hypot(dx, dz) || 1;
+            const segLength3D = Math.hypot(dx, dy, dz) || 1;
             return {
                 x: roadX,
                 y: roadY,
                 z: roadZ,
+                tangentX: dx / horizontalSegLength,
+                tangentZ: dz / horizontalSegLength,
+                slopeSin: dy / segLength3D,
                 horizontalDistance: Math.hypot(offsetX, offsetZ),
                 verticalDistance: Math.abs(offsetY),
                 progress: (segment.index + projection) / trackResolution,

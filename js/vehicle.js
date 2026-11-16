@@ -15,19 +15,30 @@
             motorcyclePitchVelocity = 0;
             motorcycleFrontWheelLifted = false;
             motorcycleRearWheelLifted = false;
+            roadPitchAngle = 0;
+            roadSlopeSin = 0;
+            steeringInputSmoothed = 0;
             velocityX = 0;
             velocityZ = 0;
+            playerRoadLateral = 0;
             longitudinalAcceleration = 0;
             lateralAcceleration = 0;
             wheelAngularSpeeds = wheelAngularSpeeds.map(() => 0);
             carSpeed = 0;
             verticalVelocity = 0;
+            isAirborne = false;
+            chassisSuspensionOffset = 0;
+            maxTireSkid = 0;
+            if (typeof resetSkidTrails === 'function') resetSkidTrails();
             playerCar.position.set(
                 playerX,
                 playerY + vehiclePhysicsConfigs[selectedVehicleType].cgHeight,
                 playerZ
             );
             playerCar.rotation.set(0, playerYaw, 0);
+            if (playerCar.userData.leanPivot) {
+                playerCar.userData.leanPivot.rotation.z = 0;
+            }
             playerCar.userData.bodyVisual.rotation.set(0, 0, 0);
             playerWheelPivots.forEach(wheelPivot => {
                 wheelPivot.position.y = wheelPivot.userData.basePositionY;
@@ -37,7 +48,7 @@
                 wheelPivot.userData.suspensionTravel = 0;
                 wheelPivot.userData.suspensionVelocity = 0;
             });
-            playerCar.userData.bodyVisual.position.y = 0;
+            playerCar.userData.bodyVisual.position.y = playerCar.userData.bodyVisualBaseY || 0;
         }
 
         function configureTireLayout() {
@@ -52,13 +63,15 @@
                         x: 0,
                         z: frontAxleZ,
                         axle: 'front',
-                        wheelRadius: nmaxNeoSpecs.frontTireRadius
+                        wheelRadius: nmaxNeoSpecs.frontTireRadius,
+                        width: nmaxNeoSpecs.frontTireWidth
                     },
                     {
                         x: 0,
                         z: rearAxleZ,
                         axle: 'rear',
-                        wheelRadius: nmaxNeoSpecs.rearTireRadius
+                        wheelRadius: nmaxNeoSpecs.rearTireRadius,
+                        width: nmaxNeoSpecs.rearTireWidth
                     }
                 ];
             } else {
@@ -71,30 +84,37 @@
                         x: -innovaZenixSpecs.frontTread / 2,
                         z: frontAxleZ,
                         axle: 'front',
-                        wheelRadius: innovaZenixSpecs.dynamicTireRadius
+                        wheelRadius: innovaZenixSpecs.dynamicTireRadius,
+                        width: innovaZenixSpecs.tireWidth
                     },
                     {
                         x: innovaZenixSpecs.frontTread / 2,
                         z: frontAxleZ,
                         axle: 'front',
-                        wheelRadius: innovaZenixSpecs.dynamicTireRadius
+                        wheelRadius: innovaZenixSpecs.dynamicTireRadius,
+                        width: innovaZenixSpecs.tireWidth
                     },
                     {
                         x: -innovaZenixSpecs.rearTread / 2,
                         z: rearAxleZ,
                         axle: 'rear',
-                        wheelRadius: innovaZenixSpecs.dynamicTireRadius
+                        wheelRadius: innovaZenixSpecs.dynamicTireRadius,
+                        width: innovaZenixSpecs.tireWidth
                     },
                     {
                         x: innovaZenixSpecs.rearTread / 2,
                         z: rearAxleZ,
                         axle: 'rear',
-                        wheelRadius: innovaZenixSpecs.dynamicTireRadius
+                        wheelRadius: innovaZenixSpecs.dynamicTireRadius,
+                        width: innovaZenixSpecs.tireWidth
                     }
                 ];
             }
             tireLayout.forEach(tire => {
                 tire.steeringAngle = 0;
+                tire.skidIntensity = 0;
+                tire.worldVelX = 0;
+                tire.worldVelZ = 0;
             });
             wheelAngularSpeeds = tireLayout.map(() => 0);
         }
@@ -250,15 +270,23 @@
         }
 
         function finalizePlayerCar(carGroup, vehicleType) {
+            const isMotorcycle = vehicleType === 'motorcycle';
             const bodyVisual = new THREE.Group();
             const bodyContent = new THREE.Group();
             const physics = vehiclePhysicsConfigs[vehicleType];
-            const dimensions = vehicleType === 'motorcycle'
+            const dimensions = isMotorcycle
                 ? nmaxNeoSpecs
                 : innovaZenixSpecs;
             const cgOffsetZ = (physics.weightDistributionFront - 0.5) *
                 dimensions.wheelbase;
-            bodyContent.position.set(0, -physics.cgHeight, -cgOffsetZ);
+            bodyContent.position.set(0, -physics.cgHeight, cgOffsetZ);
+
+            let leanPivot = null;
+            if (isMotorcycle) {
+                leanPivot = new THREE.Group();
+                leanPivot.position.set(0, -physics.cgHeight, 0);
+            }
+
             playerWheelPivots = [];
             carGroup.updateMatrixWorld(true);
             carGroup.children.forEach(model => {
@@ -266,7 +294,7 @@
                     const modelPosition = model.localToWorld(wheelPivot.position.clone());
                     wheelPivot.position.copy(carGroup.worldToLocal(modelPosition));
                     model.remove(wheelPivot);
-                    carGroup.add(wheelPivot);
+                    (leanPivot || carGroup).add(wheelPivot);
                     wheelPivot.rotation.set(0, 0, 0);
                     wheelPivot.scale.set(1, 1, 1);
                     const geometryTransform = new THREE.Group();
@@ -276,8 +304,10 @@
                         geometryTransform.add(mesh);
                     });
                     wheelPivot.userData.spinPivot.add(geometryTransform);
-                    wheelPivot.position.y -= physics.cgHeight;
-                    wheelPivot.position.z -= cgOffsetZ;
+                    if (!isMotorcycle) {
+                        wheelPivot.position.y -= physics.cgHeight;
+                    }
+                    wheelPivot.position.z += cgOffsetZ;
                     wheelPivot.userData.basePositionY = wheelPivot.position.y;
                     playerWheelPivots.push(wheelPivot);
                 });
@@ -286,7 +316,16 @@
                 if (!child.userData.isWheelPivot) bodyContent.add(child);
             });
             bodyVisual.add(bodyContent);
-            carGroup.add(bodyVisual);
+            if (leanPivot) {
+                bodyVisual.position.y = physics.cgHeight;
+                carGroup.userData.bodyVisualBaseY = physics.cgHeight;
+                leanPivot.add(bodyVisual);
+                carGroup.add(leanPivot);
+            } else {
+                carGroup.userData.bodyVisualBaseY = 0;
+                carGroup.add(bodyVisual);
+            }
+            carGroup.userData.leanPivot = leanPivot;
             carGroup.userData.bodyVisual = bodyVisual;
             carGroup.userData.wheelPivots = playerWheelPivots;
             carGroup.rotation.order = 'YXZ';
@@ -324,7 +363,7 @@
                         ? innovaZenixSpecs.frontTread
                         : innovaZenixSpecs.rearTread;
                     const lateralTransfer = physics.mass * lateralAcceleration *
-                        physics.cgHeight / (2 * trackWidth);
+                        physics.cgHeight / trackWidth;
                     lateralTravel = -Math.sign(tire.x) * lateralTransfer /
                         springRatePerTire;
                 }
@@ -352,13 +391,33 @@
                 const roadHeight = onRoad
                     ? trackCurve.getPointAt(roadProgress).y
                     : playerY;
-                const roadTravel = onRoad ? roadHeight - playerY : 0;
+                const pitchedHeightAtWheel = playerY - tire.z * Math.sin(roadPitchAngle);
+                const maxDroop = physics.suspensionMaxDroop || 0.16;
+                const maxCompression = physics.suspensionMaxCompression || 0.14;
+                const roadTravel = onRoad
+                    ? THREE.MathUtils.clamp(roadHeight - pitchedHeightAtWheel, -maxDroop, maxCompression)
+                    : -maxDroop;
                 wheelPivot.position.y = wheelPivot.userData.basePositionY +
                     roadTravel + wheelPivot.userData.suspensionTravel * 0.25;
-                wheelPivot.userData.steeringPivot.rotation.y =
-                    tire.steeringAngle || 0;
-                wheelPivot.userData.spinAngle -=
-                    (tire.longitudinalVelocity || 0) / tire.wheelRadius * dt;
+                if (!isMotorcycle) {
+                    const staticCamberRad = THREE.MathUtils.degToRad(
+                        frontAxle ? physics.frontCamberDeg : physics.rearCamberDeg
+                    );
+                    const staticToeRad = THREE.MathUtils.degToRad(
+                        frontAxle ? physics.frontToeDeg : physics.rearToeDeg
+                    );
+                    wheelPivot.rotation.z = -Math.sign(tire.x) * staticCamberRad;
+                    wheelPivot.userData.steeringPivot.rotation.y =
+                        (tire.steeringAngle || 0) + Math.sign(tire.x) * staticToeRad;
+                } else {
+                    wheelPivot.rotation.z = 0;
+                    wheelPivot.userData.steeringPivot.rotation.y =
+                        tire.steeringAngle || 0;
+                }
+                const wheelSpinRate = wheelAngularSpeeds[index] !== undefined
+                    ? wheelAngularSpeeds[index]
+                    : (tire.longitudinalVelocity || 0) / tire.wheelRadius;
+                wheelPivot.userData.spinAngle -= wheelSpinRate * dt;
                 wheelPivot.userData.spinPivot.rotation.x = wheelPivot.userData.spinAngle;
                 if (frontAxle) {
                     frontTravel += wheelPivot.userData.suspensionTravel;
@@ -387,9 +446,15 @@
             }
 
             const bodyVisual = playerCar.userData.bodyVisual;
-            bodyVisual.position.y = -averageTravel * 0.35;
+            const bodyBaseY = playerCar.userData.bodyVisualBaseY || 0;
+            bodyVisual.position.y = bodyBaseY - averageTravel * 0.35;
             bodyVisual.rotation.x = isMotorcycle ? motorcyclePitch : bodyPitch;
-            bodyVisual.rotation.z = bodyRoll;
+            if (playerCar.userData.leanPivot) {
+                playerCar.userData.leanPivot.rotation.z = bodyRoll;
+                bodyVisual.rotation.z = 0;
+            } else {
+                bodyVisual.rotation.z = bodyRoll;
+            }
         }
 
         function getVehicleObjectPath(object, root) {
@@ -889,7 +954,7 @@
                                         const vehicleMaterial = material.clone();
                                         if ((vehicleType === 'car' && material.name === 'Metallic') ||
                                             (vehicleType === 'motorcycle' &&
-                                                material.name.startsWith('motor-yamaha-nmax'))) {
+                                                material.name === 'ko_copy_0')) {
                                             vehicleMaterial.color.set(color);
                                             vehicleMaterial.userData.isVehiclePaint = true;
                                         }
@@ -1015,7 +1080,14 @@
                                         )
                                     ) {
                                         mesh.material = batch.material.clone();
-                                        mesh.material.color.set(0x111111);
+                                        mesh.material.userData.isVehiclePaint = false;
+                                        mesh.material.color.set(
+                                            vehicleType === 'motorcycle' &&
+                                            batch.material.userData.isVehiclePaint &&
+                                            batch.material.map
+                                                ? 0xffffff
+                                                : 0x111111
+                                        );
                                     }
                                     mesh.castShadow = true;
                                     mesh.receiveShadow = true;
