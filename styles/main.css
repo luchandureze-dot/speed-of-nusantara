@@ -259,6 +259,234 @@
             font-size: 14px;
             letter-spacing: 0.05em;
         }
+        #lap-complete-toast[hidden],
+        #start-countdown[hidden] {
+            display: none;
+        }
+        #lap-complete-toast {
+            margin-bottom: 10px;
+            padding: 7px 14px;
+            border: 1px solid #22c55e;
+            border-radius: 6px;
+            background: rgba(22, 163, 74, 0.25);
+            color: #bbf7d0;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+        }
+        #start-countdown {
+            position: fixed;
+            top: 28%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 15;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            padding: 16px 34px;
+            border-radius: 14px;
+            border: 1.5px solid rgba(255, 204, 0, 0.72);
+            background: rgba(8, 12, 22, 0.84);
+            backdrop-filter: blur(8px);
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+            pointer-events: none;
+            text-align: center;
+        }
+        .countdown-kicker {
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.16em;
+            color: #cbd5e1;
+        }
+        #start-countdown-value {
+            font-family: 'Broken15', 'Segoe UI', sans-serif;
+            font-size: 62px;
+            line-height: 1;
+            font-weight: 900;
+            color: #ffcc00;
+            text-shadow: 0 0 22px rgba(255, 204, 0, 0.55);
+        }
+        #start-countdown.is-go {
+            border-color: #22c55e;
+        }
+        #start-countdown.is-go #start-countdown-value {
+            color: #4ade80;
+            text-shadow: 0 0 22px rgba(74, 222, 128, 0.6);
+        }
+        #busted-banner {
+            position: fixed;
+            top: 22px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 12;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            padding: 10px 22px;
+            border: 2px solid #38bdf8;
+            border-radius: 10px;
+            background: linear-gradient(135deg, rgba(12, 24, 58, 0.92), rgba(55, 12, 24, 0.9));
+            box-shadow: 0 0 24px rgba(56, 189, 248, 0.55);
+            text-align: center;
+            pointer-events: none;
+        }
+        .busted-title {
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.16em;
+            color: #7dd3fc;
+        }
+        .busted-timer {
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            color: #ffffff;
+        }
+        #busted-countdown {
+            color: #ff4757;
+            font-size: 24px;
+        }
+        #police-alert-toast[hidden] {
+            display: none;
+        }
+        #police-alert-toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 14;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 18px;
+            border-radius: 10px;
+            border: 1.5px solid #38bdf8;
+            background: rgba(10, 15, 28, 0.9);
+            backdrop-filter: blur(8px);
+            box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55);
+            color: #e0f2fe;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            white-space: nowrap;
+            pointer-events: none;
+            animation: policeToastPop 0.24s ease-out;
+        }
+        .police-alert-badge {
+            padding: 3px 8px;
+            border-radius: 5px;
+            background: #0284c7;
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+        }
+        #police-alert-toast.tier-2 {
+            border-color: #f59e0b;
+            color: #fef3c7;
+            box-shadow: 0 10px 28px rgba(245, 158, 11, 0.28);
+        }
+        #police-alert-toast.tier-2 .police-alert-badge {
+            background: #d97706;
+        }
+        #police-alert-toast.tier-3 {
+            border-color: #ef4444;
+            background: rgba(34, 10, 16, 0.92);
+            color: #fee2e2;
+            box-shadow: 0 10px 30px rgba(239, 68, 68, 0.42);
+        }
+        #police-alert-toast.tier-3 .police-alert-badge {
+            background: #dc2626;
+        }
+        @keyframes policeToastPop {
+            from {
+                opacity: 0;
+                transform: translate(-50%, 10px) scale(0.96);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, 0) scale(1);
+            }
+        }
+        #damage-hud[hidden],
+        #crash-damage-toast[hidden] {
+            display: none;
+        }
+        #damage-hud {
+            width: 236px;
+            box-sizing: border-box;
+            margin-bottom: 8px;
+            padding: 7px 11px;
+            border-radius: 9px;
+            border: 1px solid rgba(249, 115, 22, 0.72);
+            background: rgba(24, 10, 8, 0.84);
+            backdrop-filter: blur(8px);
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 2px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            pointer-events: none;
+        }
+        .damage-hud-title {
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.14em;
+            color: #fb923c;
+        }
+        #damage-hud-details {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: #fed7aa;
+            font-variant-numeric: tabular-nums;
+            text-align: right;
+        }
+        #crash-damage-toast {
+            position: fixed;
+            top: 96px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 14;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 16px;
+            border-radius: 10px;
+            border: 1.5px solid #f97316;
+            background: rgba(34, 12, 8, 0.92);
+            backdrop-filter: blur(8px);
+            box-shadow: 0 10px 28px rgba(249, 115, 22, 0.32);
+            color: #ffedd5;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            white-space: nowrap;
+            pointer-events: none;
+            animation: damageToastPop 0.22s ease-out;
+        }
+        .crash-damage-badge {
+            padding: 3px 8px;
+            border-radius: 5px;
+            background: #ea580c;
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+        }
+        @keyframes damageToastPop {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -8px) scale(0.96);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, 0) scale(1);
+            }
+        }
         #controls-hint {
             position: fixed;
             bottom: 70px;
@@ -303,7 +531,7 @@
             background: #ffcc00;
             color: #111;
         }
-        #exit-game {
+        #pause-game {
             position: fixed;
             top: 20px;
             left: 20px;
@@ -321,13 +549,13 @@
             cursor: pointer;
             transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
         }
-        #exit-game:hover,
-        #exit-game:focus-visible {
+        #pause-game:hover,
+        #pause-game:focus-visible {
             background: #ffcc00;
             color: #111;
         }
         @media (pointer: coarse), (max-width: 768px) {
-            #exit-game {
+            #pause-game {
                 top: 14px;
                 left: 14px;
                 padding: 7px 11px;
@@ -358,10 +586,20 @@
             pointer-events: none;
             z-index: 6;
         }
+        .touch-right-stack {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+            pointer-events: none;
+        }
         .touch-cluster {
             display: flex;
             gap: 10px;
             pointer-events: auto;
+        }
+        .touch-shifters {
+            gap: 8px;
         }
         .touch-btn {
             min-width: 58px;
@@ -382,6 +620,18 @@
             font-size: 12px;
             border-color: rgba(255, 255, 255, 0.45);
         }
+        .touch-btn-trans {
+            border-color: rgba(72, 219, 251, 0.72);
+            color: #bae6fd;
+        }
+        .touch-btn-shift {
+            border-color: rgba(255, 204, 0, 0.72);
+            color: #fde68a;
+            opacity: 0.42;
+        }
+        .touch-shifters.is-manual .touch-btn-shift {
+            opacity: 1;
+        }
         .touch-btn-brake {
             border-color: rgba(255, 92, 92, 0.75);
         }
@@ -400,6 +650,9 @@
                 display: flex;
                 inset: auto 12px 112px 12px;
             }
+            .touch-right-stack {
+                gap: 6px;
+            }
             .touch-cluster {
                 gap: 6px;
             }
@@ -412,6 +665,10 @@
             .touch-btn-handbrake {
                 min-width: 42px;
                 font-size: 11px;
+            }
+            .touch-shifters .touch-btn-small {
+                height: 38px;
+                min-width: 40px;
             }
             #hud-actions {
                 left: 12px;
@@ -431,6 +688,14 @@
                 bottom: 10px;
                 transform: translateX(-50%);
                 align-items: center;
+            }
+            #police-alert-toast {
+                bottom: 186px;
+                padding: 8px 14px;
+                font-size: 13px;
+                max-width: calc(100vw - 24px);
+                white-space: normal;
+                text-align: center;
             }
             .dashboard-stats {
                 flex-direction: row;
@@ -528,10 +793,17 @@
             border: 2px solid #ff4444;
             box-shadow: 0 0 30px rgba(255, 68, 68, 0.5);
         }
+        #game-over.is-busted {
+            border-color: #38bdf8;
+            box-shadow: 0 0 34px rgba(56, 189, 248, 0.55);
+        }
         #game-over h2 {
             margin-top: 0;
             color: #ff4444;
             font-size: 32px;
+        }
+        #game-over.is-busted h2 {
+            color: #38bdf8;
         }
         .btn {
             background: #ffcc00;
@@ -549,6 +821,71 @@
         .btn:hover {
             background: #ffaa00;
             transform: scale(1.05);
+        }
+        #pause-menu[hidden] {
+            display: none;
+        }
+        #pause-menu {
+            position: fixed;
+            inset: 0;
+            z-index: 18;
+            display: grid;
+            place-items: center;
+            padding: 18px;
+            background: rgba(5, 7, 14, 0.72);
+            backdrop-filter: blur(6px);
+        }
+        .pause-card {
+            width: min(340px, 100%);
+            padding: 28px 26px;
+            border-radius: 14px;
+            border: 1.5px solid rgba(255, 204, 0, 0.68);
+            background: rgba(12, 16, 26, 0.96);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.68);
+            text-align: center;
+            color: #ffffff;
+        }
+        .pause-kicker {
+            display: block;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.16em;
+            color: #9fa6b2;
+        }
+        .pause-card h2 {
+            margin: 6px 0 18px;
+            font-size: 30px;
+            letter-spacing: 0.08em;
+            color: #ffcc00;
+        }
+        .pause-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .pause-actions .btn {
+            margin-top: 0;
+            width: 100%;
+            padding: 12px 18px;
+            font-size: 14px;
+            letter-spacing: 0.08em;
+        }
+        .pause-btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #f8fafc;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+        }
+        .pause-btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .pause-btn-danger {
+            background: rgba(239, 68, 68, 0.16);
+            color: #fecaca;
+            border: 1px solid rgba(239, 68, 68, 0.55);
+        }
+        .pause-btn-danger:hover {
+            background: rgba(239, 68, 68, 0.85);
+            color: #ffffff;
         }
         #start-menu {
             position: fixed;
@@ -711,7 +1048,7 @@
             z-index: 0;
         }
         body:not(.game-active) #dashboard,
-        body:not(.game-active) #exit-game,
+        body:not(.game-active) #pause-game,
         body:not(.game-active) #hud-actions,
         body:not(.game-active) #controls-hint,
         body:not(.game-active) #touch-controls {

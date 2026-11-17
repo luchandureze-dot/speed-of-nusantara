@@ -25,29 +25,17 @@
                 updateVehiclePhysicsStep(substepDt);
             }
             const physics = vehiclePhysicsConfigs[selectedVehicleType];
-            const targetThrottle = keys.forward ? 1 : 0;
-            const targetBrake = keys.backward && !keys.forward ? 1 : 0;
             const targetHandbrake = keys.handbrake ? 1 : 0;
-            const throttleRate = targetThrottle > throttleVisual ? 18 : 14;
-            const brakeRate = targetBrake > brakeVisual ? 18 : 14;
             const handbrakeRate = targetHandbrake > handbrakeVisual ? 22 : 16;
-            throttleVisual = THREE.MathUtils.clamp(
-                throttleVisual + Math.sign(targetThrottle - throttleVisual) * Math.min(Math.abs(targetThrottle - throttleVisual), throttleRate * dt),
-                0,
-                1
-            );
-            brakeVisual = THREE.MathUtils.clamp(
-                brakeVisual + Math.sign(targetBrake - brakeVisual) * Math.min(Math.abs(targetBrake - brakeVisual), brakeRate * dt),
-                0,
-                1
-            );
+            throttleVisual = throttleSmoothed;
+            brakeVisual = Math.max(brakeSmoothed, reverseSmoothed);
             handbrakeVisual = THREE.MathUtils.clamp(
                 handbrakeVisual + Math.sign(targetHandbrake - handbrakeVisual) * Math.min(Math.abs(targetHandbrake - handbrakeVisual), handbrakeRate * dt),
                 0,
                 1
             );
 
-            const isReversing = carSpeed < -0.25 || (targetBrake > 0 && carSpeed <= 0.15);
+            const isReversing = carSpeed < -0.25 || (reverseSmoothed > 0.15 && carSpeed <= 0.15);
             const displayGear = isReversing && selectedVehicleType === 'car' ? 'R' : currentGear;
             const rpmPercent = THREE.MathUtils.clamp(
                 (engineRpm - physics.idleRpm) / Math.max(1, physics.maxRpm - physics.idleRpm) * 100,
@@ -58,6 +46,12 @@
 
             document.getElementById('rpm-value').innerText = Math.round(engineRpm);
             document.getElementById('gear-value').innerText = displayGear;
+            const gearLabelEl = document.getElementById('gear-label');
+            if (gearLabelEl) {
+                gearLabelEl.innerText = physics.isCvt
+                    ? 'RASIO'
+                    : (isManualTransmission ? 'GIGI MT' : 'GIGI AT');
+            }
 
             const rpmBarFill = document.getElementById('rpm-bar-fill');
             if (rpmBarFill) rpmBarFill.style.width = `${rpmPercent.toFixed(1)}%`;
@@ -88,30 +82,85 @@
             carSpeed = velocityX * forwardX + velocityZ * forwardZ;
 
             const reverseRequested = keys.backward && !keys.forward;
-            const throttle = keys.forward ? 1 : 0;
-            const brake = reverseRequested && carSpeed > 0.15 ? 1 : 0;
-            const reverse = reverseRequested && carSpeed <= 0.15;
+            const rawThrottle = keys.forward ? 1 : 0;
+            const rawBrake = reverseRequested && carSpeed > 0.15 ? 1 : 0;
+            const rawReverse = reverseRequested && carSpeed <= 0.15 ? 1 : 0;
             const handbrake = keys.handbrake ? 1 : 0;
+
+            throttleSmoothed = THREE.MathUtils.damp(
+                throttleSmoothed,
+                rawThrottle,
+                rawThrottle > throttleSmoothed ? 6.8 : 9.2,
+                dt
+            );
+            brakeSmoothed = THREE.MathUtils.damp(
+                brakeSmoothed,
+                rawBrake,
+                rawBrake > brakeSmoothed ? 7.4 : 11.0,
+                dt
+            );
+            reverseSmoothed = THREE.MathUtils.damp(
+                reverseSmoothed,
+                rawReverse,
+                rawReverse > reverseSmoothed ? 5.2 : 10.5,
+                dt
+            );
+            if (throttleSmoothed < 0.001 && rawThrottle === 0) throttleSmoothed = 0;
+            if (brakeSmoothed < 0.001 && rawBrake === 0) brakeSmoothed = 0;
+            if (reverseSmoothed < 0.001 && rawReverse === 0) reverseSmoothed = 0;
+
+            const throttle = throttleSmoothed * (0.4 + 0.6 * throttleSmoothed);
+            const brake = brakeSmoothed * (0.35 + 0.65 * brakeSmoothed);
+            const reverse = reverseSmoothed * (0.4 + 0.6 * reverseSmoothed);
+
+            const accelDamageScale = Math.max(0.25, Math.pow(0.98, damageAccelHits));
+            const topSpeedDamageScale = Math.max(0.25, Math.pow(0.98, damageTopSpeedHits));
+            const handlingGripScale = Math.max(0.45, Math.pow(0.99, damageHandlingHits));
+            const handlingReturnScale = Math.max(0.45, Math.pow(0.99, damageHandlingHits));
+            const effectiveMaxSpeed = physics.maxSpeed * topSpeedDamageScale;
 
             const rawSteeringInput = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
             const steeringSpeed = Math.abs(carSpeed);
-            const lowSpeedAssist = 1 + 0.4 * THREE.MathUtils.clamp(1 - steeringSpeed / 8, 0, 1);
-            const isReturningToCenter =
-                rawSteeringInput === 0 ||
-                (steeringInputSmoothed !== 0 &&
-                    Math.sign(rawSteeringInput) !== Math.sign(steeringInputSmoothed));
-            const activeSteerRate = isReturningToCenter
-                ? physics.steerReturnRate
-                : physics.steerInRate * lowSpeedAssist;
-            const maxSteeringStep = activeSteerRate * dt;
-            steeringInputSmoothed += THREE.MathUtils.clamp(
-                rawSteeringInput - steeringInputSmoothed,
-                -maxSteeringStep,
-                maxSteeringStep
-            );
+            const lowSpeedAssist = 1 + 0.35 * THREE.MathUtils.clamp(1 - steeringSpeed / 8, 0, 1);
+            const highSpeedSteerSmooth = 1 / (1 + Math.max(0, steeringSpeed - 18) * 0.016);
+            const isCounterSteering =
+                rawSteeringInput !== 0 &&
+                steeringInputSmoothed !== 0 &&
+                Math.sign(rawSteeringInput) !== Math.sign(steeringInputSmoothed);
+
+            if (rawSteeringInput === 0) {
+                steeringInputSmoothed = THREE.MathUtils.damp(
+                    steeringInputSmoothed,
+                    0,
+                    physics.steerReturnRate * 1.5 * handlingReturnScale,
+                    dt
+                );
+                if (Math.abs(steeringInputSmoothed) < 0.001) steeringInputSmoothed = 0;
+            } else if (isCounterSteering) {
+                const maxCounterStep = physics.steerReturnRate * 1.05 * handlingReturnScale * dt;
+                steeringInputSmoothed += THREE.MathUtils.clamp(
+                    rawSteeringInput - steeringInputSmoothed,
+                    -maxCounterStep,
+                    maxCounterStep
+                );
+            } else {
+                const progressiveSlope = 0.48 + 0.82 * Math.abs(steeringInputSmoothed);
+                const steerRate = physics.steerInRate * lowSpeedAssist * highSpeedSteerSmooth * progressiveSlope;
+                const maxSteerStep = steerRate * dt;
+                steeringInputSmoothed += THREE.MathUtils.clamp(
+                    rawSteeringInput - steeringInputSmoothed,
+                    -maxSteerStep,
+                    maxSteerStep
+                );
+            }
+
             const steerAbs = Math.abs(steeringInputSmoothed);
-            const steeringInput = Math.sign(steeringInputSmoothed) *
-                (0.45 * steerAbs + 0.55 * Math.pow(steerAbs, physics.steerGamma));
+            const baseSteeringInput = Math.sign(steeringInputSmoothed) *
+                (0.18 * steerAbs + 0.82 * Math.pow(steerAbs, physics.steerGamma));
+            const alignmentPull = damageHandlingHits > 0 && Math.abs(carSpeed) > 1.5
+                ? damagePullSign * Math.min(0.18, damageHandlingHits * 0.008) * THREE.MathUtils.clamp(Math.abs(carSpeed) / 14, 0, 1)
+                : 0;
+            const steeringInput = THREE.MathUtils.clamp(baseSteeringInput + alignmentPull, -1, 1);
             const steeringSpeedScale =
                 1 + Math.pow(steeringSpeed * physics.steeringSpeedFalloff, 2);
             const steeringAngle = steeringInput * (isMotorcycle
@@ -170,33 +219,43 @@
                 );
             };
 
-            engineRpm = getEngineRpm();
+            engineRpm = THREE.MathUtils.damp(engineRpm, getEngineRpm(), 15, dt);
             const activeGearRatio = getActiveGearRatio();
             if (physics.isCvt) {
                 currentGear = activeGearRatio > 1.95 ? 1 : activeGearRatio > 1.3 ? 2 : 3;
-            } else {
+            } else if (!isManualTransmission) {
                 if (engineRpm >= physics.maxRpm * 0.90 && currentGear < physics.gearRatios.length) {
                     currentGear += 1;
+                    gearShiftBlendTimer = 0.18;
                 } else if (engineRpm <= physics.maxRpm * 0.38 && currentGear > 1) {
                     currentGear -= 1;
+                    gearShiftBlendTimer = 0.18;
                 }
             }
+            if (gearShiftBlendTimer > 0) {
+                gearShiftBlendTimer = Math.max(0, gearShiftBlendTimer - dt);
+            }
+            const shiftTorqueScale = gearShiftBlendTimer > 0
+                ? 0.38 + 0.62 * (1 - gearShiftBlendTimer / 0.18)
+                : 1.0;
 
             const gearRatio = getActiveGearRatio();
             const drivenTireCount = tireLayout.filter(tire => tire.axle === physics.drivenAxle).length || 1;
             const torqueFactor = getEngineTorqueFactor(engineRpm, physics.idleRpm, physics.maxRpm);
-            const fullDriveTorque = physics.maxTorqueNm * torqueFactor *
-                gearRatio * physics.finalDrive * 0.88;
+            const fullDriveTorque = physics.maxTorqueNm * accelDamageScale * torqueFactor *
+                gearRatio * physics.finalDrive * 0.88 * shiftTorqueScale;
+            const coastEngineTorque = Math.abs(carSpeed) > 0.3
+                ? -Math.sign(carSpeed) * physics.maxTorqueNm * physics.engineBrakingFactor *
+                  gearRatio * physics.finalDrive * 0.88
+                : 0;
             let driveTorquePerTire = 0;
-            if (throttle) {
-                driveTorquePerTire = fullDriveTorque / drivenTireCount;
-            } else if (reverse) {
-                driveTorquePerTire = -physics.maxTorqueNm * 0.78 *
+            if (reverse > 0.01 && carSpeed <= 0.15) {
+                driveTorquePerTire = -physics.maxTorqueNm * accelDamageScale * 0.78 * reverse *
                     gearRatio * physics.finalDrive * 0.88 / drivenTireCount;
-            } else if (!brake && Math.abs(carSpeed) > 0.3) {
-                driveTorquePerTire = -Math.sign(carSpeed) * physics.maxTorqueNm *
-                    physics.engineBrakingFactor * gearRatio * physics.finalDrive *
-                    0.88 / drivenTireCount;
+            } else if (brake > 0.04) {
+                driveTorquePerTire = coastEngineTorque * (1 - brake * 0.45) / drivenTireCount;
+            } else {
+                driveTorquePerTire = THREE.MathUtils.lerp(coastEngineTorque, fullDriveTorque, throttle) / drivenTireCount;
             }
 
             const cosRoadPitch = Math.cos(roadPitchAngle);
@@ -303,8 +362,8 @@
                 );
                 let lateralForce = -calculateTireForce(
                     slipAngle,
-                    physics.lateralStiffness,
-                    maximumTireForce,
+                    physics.lateralStiffness * handlingGripScale,
+                    maximumTireForce * handlingGripScale,
                     physics.tireShapeFactor
                 );
                 if (isMotorcycle) {
@@ -363,14 +422,15 @@
                 const axleBrakeBias = frontAxle
                     ? physics.brakeBiasFront
                     : 1 - physics.brakeBiasFront;
-                const absScale = !handbrakeOnTire && brake && longitudinalVelocity > 1.5 && slipRatio < -physics.absSlipThreshold
+                const absScale = !handbrakeOnTire && brake > 0.02 && longitudinalVelocity > 1.5 && slipRatio < -physics.absSlipThreshold
                     ? THREE.MathUtils.clamp(
                         1 - (-slipRatio - physics.absSlipThreshold) / 0.12,
                         0.15,
                         1
                     )
                     : 1;
-                const brakeTorquePerTire = brake * absScale * physics.maxBrakingForce *
+                const lowSpeedBrakeScale = THREE.MathUtils.clamp(Math.abs(longitudinalVelocity) / 0.85, 0.25, 1);
+                const brakeTorquePerTire = brake * absScale * lowSpeedBrakeScale * physics.maxBrakingForce *
                     axleBrakeBias * tireWheelRadius / axleTireCount;
                 const handbrakeTorquePerTire = handbrakeOnTire *
                     (physics.maxHandbrakeForce || 10000) * tireWheelRadius / axleTireCount;
@@ -541,8 +601,8 @@
             const updatedForwardX = -Math.sin(playerYaw);
             const updatedForwardZ = -Math.cos(playerYaw);
             carSpeed = velocityX * updatedForwardX + velocityZ * updatedForwardZ;
-            if (carSpeed > physics.maxSpeed) {
-                const excessSpeed = carSpeed - physics.maxSpeed;
+            if (carSpeed > effectiveMaxSpeed) {
+                const excessSpeed = carSpeed - effectiveMaxSpeed;
                 velocityX -= updatedForwardX * excessSpeed;
                 velocityZ -= updatedForwardZ * excessSpeed;
             } else if (carSpeed < -physics.reverseSpeed) {
@@ -552,6 +612,55 @@
             }
 
             carSpeed = velocityX * updatedForwardX + velocityZ * updatedForwardZ;
-            engineRpm = getEngineRpm(wheelAngularSpeeds);
+            engineRpm = THREE.MathUtils.damp(engineRpm, getEngineRpm(wheelAngularSpeeds), 15, dt);
+        }
+
+        function syncTransmissionUi() {
+            const physics = vehiclePhysicsConfigs[selectedVehicleType];
+            const gearLabelEl = document.getElementById('gear-label');
+            if (gearLabelEl && physics) {
+                gearLabelEl.innerText = physics.isCvt
+                    ? 'RASIO'
+                    : (isManualTransmission ? 'GIGI MT' : 'GIGI AT');
+            }
+            const touchTransBtn = document.getElementById('touch-transmission');
+            const shiftCluster = document.getElementById('touch-shift-controls');
+            if (touchTransBtn) {
+                const isManualActive = isManualTransmission && (!physics || !physics.isCvt);
+                touchTransBtn.innerText = isManualActive ? 'MT' : 'AT';
+                touchTransBtn.classList.toggle('is-active', isManualActive);
+                touchTransBtn.disabled = Boolean(physics && physics.isCvt);
+            }
+            if (shiftCluster) {
+                const showManualTouch = isManualTransmission && (!physics || !physics.isCvt);
+                shiftCluster.classList.toggle('is-manual', showManualTouch);
+            }
+        }
+
+        function toggleTransmissionMode() {
+            const physics = vehiclePhysicsConfigs[selectedVehicleType];
+            if (!physics || physics.isCvt) return;
+            isManualTransmission = !isManualTransmission;
+            syncTransmissionUi();
+        }
+
+        function shiftGearUp() {
+            const physics = vehiclePhysicsConfigs[selectedVehicleType];
+            if (!physics || physics.isCvt || !isManualTransmission) return;
+            if (currentGear < physics.gearRatios.length) {
+                currentGear += 1;
+                gearShiftBlendTimer = 0.16;
+            }
+            document.getElementById('gear-value').innerText = currentGear;
+        }
+
+        function shiftGearDown() {
+            const physics = vehiclePhysicsConfigs[selectedVehicleType];
+            if (!physics || physics.isCvt || !isManualTransmission) return;
+            if (currentGear > 1) {
+                currentGear -= 1;
+                gearShiftBlendTimer = 0.16;
+            }
+            document.getElementById('gear-value').innerText = currentGear;
         }
 

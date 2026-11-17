@@ -10,10 +10,19 @@
 
     <div id="dashboard">
         <div class="dashboard-stats">
-            <div class="stat">Skor Jarak: <span id="score">0</span> m</div>
-            <div class="stat stat-best">Rekor: <span id="best-score">0</span> m</div>
+            <div class="stat">Lap <span id="lap-count">1</span> · Waktu: <span id="score">00:00.00</span></div>
+            <div class="stat stat-best">Best Lap: <span id="best-score">--:--.--</span></div>
         </div>
-        <div id="near-miss-toast" hidden>+25 m SALIP TIPIS!</div>
+        <div id="near-miss-toast" hidden>-0.5s SALIP TIPIS!</div>
+        <div id="lap-complete-toast" hidden>LAP 1 SELESAI · 00:00.00</div>
+        <div id="busted-banner" role="status" aria-live="assertive" hidden>
+            <span class="busted-title">TERKEPUNG POLISI!</span>
+            <span class="busted-timer">BUSTED DALAM <strong id="busted-countdown">5</strong></span>
+        </div>
+        <div id="damage-hud" aria-live="polite" hidden>
+            <span class="damage-hud-title">KERUSAKAN</span>
+            <span id="damage-hud-details"></span>
+        </div>
         <div id="speedometer" aria-label="Panel instrumen kendaraan">
             <div class="cluster-top">
                 <div class="speed-block">
@@ -21,7 +30,7 @@
                     <div id="speed-unit">KM/H</div>
                 </div>
                 <div class="gear-block">
-                    <span id="gear-label">GIGI</span>
+                    <span id="gear-label">GIGI AT</span>
                     <span id="gear-value">1</span>
                 </div>
             </div>
@@ -76,16 +85,35 @@
         </div>
     </div>
 
+    <div id="start-countdown" role="status" aria-live="assertive" hidden>
+        <span class="countdown-kicker">ROLLING START · 60 KM/H</span>
+        <span id="start-countdown-value">3</span>
+    </div>
+
+    <div id="police-alert-toast" role="status" aria-live="polite" hidden>
+        <span class="police-alert-badge" id="police-alert-tier">TINGKAT 1</span>
+        <span id="police-alert-text">Mereka tahu kamu mengebut!</span>
+    </div>
+
+    <div id="crash-damage-toast" role="status" aria-live="assertive" hidden>
+        <span class="crash-damage-badge" id="crash-damage-badge">KERUSAKAN</span>
+        <span id="crash-damage-text">Akselerasi -5%</span>
+    </div>
+
     <div id="controls-hint" hidden>
         <b>W / Panah Atas:</b> Gas<br>
         <b>S / Panah Bawah:</b> Rem / Mundur<br>
         <b>A D / Panah Kiri Kanan:</b> Belok / Pindah Lajur<br>
         <b>Spasi:</b> Rem Tangan (Kunci Ban Belakang)<br>
+        <b>M:</b> Mode Transmisi Manual / Otomatis<br>
+        <b>&lt; / &gt;:</b> Turun / Naik Gigi (Mode Manual)<br>
         <b>C:</b> Ganti Kamera<br>
+        <b>X (Tahan):</b> Lihat ke Belakang<br>
+        <b>Esc / P:</b> Pause Permainan<br>
         <b>Klik kiri + drag:</b> Putar Kamera (lepas untuk kembali netral)<br>
         <b>Scroll:</b> Zoom In / Out
     </div>
-    <button id="exit-game" type="button" aria-label="Keluar game dan kembali ke beranda">← HOME</button>
+    <button id="pause-game" type="button" aria-label="Pause permainan">❚❚ PAUSE</button>
     <div id="hud-actions">
         <button id="controls-toggle" type="button" aria-controls="controls-hint"
                 aria-expanded="false" aria-label="Tampilkan petunjuk kontrol">i</button>
@@ -98,20 +126,39 @@
             <button id="touch-left" class="touch-btn" type="button" aria-label="Belok kiri">◀</button>
             <button id="touch-right" class="touch-btn" type="button" aria-label="Belok kanan">▶</button>
         </div>
-        <div class="touch-cluster touch-pedals">
-            <button id="touch-camera" class="touch-btn touch-btn-small" type="button" aria-label="Ganti kamera">CAM</button>
-            <button id="touch-handbrake" class="touch-btn touch-btn-handbrake" type="button" aria-label="Rem tangan">HB</button>
-            <button id="touch-brake" class="touch-btn touch-btn-brake" type="button" aria-label="Rem atau mundur">REM</button>
-            <button id="touch-gas" class="touch-btn touch-btn-gas" type="button" aria-label="Gas">GAS</button>
+        <div class="touch-right-stack">
+            <div id="touch-shift-controls" class="touch-cluster touch-shifters">
+                <button id="touch-transmission" class="touch-btn touch-btn-small touch-btn-trans" type="button" aria-label="Ganti mode transmisi">AT</button>
+                <button id="touch-shift-down" class="touch-btn touch-btn-small touch-btn-shift" type="button" aria-label="Turun gigi">G-</button>
+                <button id="touch-shift-up" class="touch-btn touch-btn-small touch-btn-shift" type="button" aria-label="Naik gigi">G+</button>
+            </div>
+            <div class="touch-cluster touch-pedals">
+                <button id="touch-camera" class="touch-btn touch-btn-small" type="button" aria-label="Ganti kamera">CAM</button>
+                <button id="touch-handbrake" class="touch-btn touch-btn-handbrake" type="button" aria-label="Rem tangan">HB</button>
+                <button id="touch-brake" class="touch-btn touch-btn-brake" type="button" aria-label="Rem atau mundur">REM</button>
+                <button id="touch-gas" class="touch-btn touch-btn-gas" type="button" aria-label="Gas">GAS</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="pause-menu" role="dialog" aria-modal="true" aria-labelledby="pause-title" hidden>
+        <div class="pause-card">
+            <span class="pause-kicker">PERMAINAN DIJEDA</span>
+            <h2 id="pause-title">PAUSE</h2>
+            <div class="pause-actions">
+                <button id="pause-resume" class="btn pause-btn-primary" type="button">LANJUTKAN</button>
+                <button id="pause-reset" class="btn pause-btn-secondary" type="button">RESET</button>
+                <button id="pause-back-menu" class="btn pause-btn-danger" type="button">BACK TO MENU</button>
+            </div>
         </div>
     </div>
 
     <div id="game-over">
-        <h2>KECELAKAAN!</h2>
-        <p>Kamu menabrak kendaraan lain di Tol Dalam Kota.</p>
-        <p id="new-record-badge" hidden>REKOR BARU!</p>
-        <p>Total Skor: <span id="final-score">0</span> meter</p>
-        <p class="final-best">Rekor Terbaik: <span id="final-best-score">0</span> meter</p>
+        <h2 id="game-over-title">KECELAKAAN!</h2>
+        <p id="game-over-message">Kamu menabrak kendaraan lain di Tol Dalam Kota.</p>
+        <p id="new-record-badge" hidden>REKOR LAP BARU!</p>
+        <p>Lap Selesai: <span id="final-laps">0</span> · Waktu: <span id="final-score">00:00.00</span></p>
+        <p class="final-best">Best Lap: <span id="final-best-score">--:--.--</span></p>
         <button class="btn" onclick="restartGame()">MAIN LAGI</button>
     </div>
 

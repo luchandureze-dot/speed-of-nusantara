@@ -31,6 +31,10 @@
         let roadPitchAngle = 0;
         let roadSlopeSin = 0;
         let steeringInputSmoothed = 0;
+        let throttleSmoothed = 0;
+        let brakeSmoothed = 0;
+        let reverseSmoothed = 0;
+        let gearShiftBlendTimer = 0;
         let throttleVisual = 0;
         let brakeVisual = 0;
         let handbrakeVisual = 0;
@@ -41,12 +45,22 @@
         let clock;
         
         // Status Kontrol
-        const keys = { forward: false, backward: false, left: false, right: false, handbrake: false };
+        const keys = { forward: false, backward: false, left: false, right: false, handbrake: false, lookBack: false };
         
         // Konfigurasi fisika kendaraan
         let carSpeed = 0;
         let engineRpm = 1000;
         let currentGear = 1;
+        let isManualTransmission = false;
+        let policeBustedTimer = 5;
+        let policeThreatLevel = 0;
+        let policeToastTimer = 0;
+        let damageAccelHits = 0;
+        let damageTopSpeedHits = 0;
+        let damageHandlingHits = 0;
+        let damagePullSign = 1;
+        let crashDamageCooldown = 0;
+        let crashDamageToastTimer = 0;
         let wheelbase = 2.7;
         const vehiclePhysicsConfigs = {
             car: {
@@ -68,18 +82,18 @@
                 maxHandbrakeForce: 14000,
                 brakeBiasFront: 0.72,
                 absSlipThreshold: 0.18,
-                frictionCoefficient: 0.92,
-                longitudinalStiffness: 5,
-                lateralStiffness: 4.5,
-                tireShapeFactor: 1.3,
+                frictionCoefficient: 0.95,
+                longitudinalStiffness: 5.1,
+                lateralStiffness: 6.6,
+                tireShapeFactor: 1.48,
                 wheelInertia: 2.5,
                 drivenAxle: 'front',
                 maxInnerWheelSteerAngle: 37.5 * Math.PI / 180,
                 ackermannFactor: 0.65,
-                steeringSpeedFalloff: 0.155,
-                steerInRate: 1.9,
-                steerReturnRate: 3.6,
-                steerGamma: 2.1,
+                steeringSpeedFalloff: 0.040,
+                steerInRate: 1.25,
+                steerReturnRate: 2.8,
+                steerGamma: 2.15,
                 frontCamberDeg: -0.15,
                 rearCamberDeg: -1.25,
                 frontToeDeg: 0.08,
@@ -89,10 +103,10 @@
                 camberThrustCoefficient: 0.65,
                 frontSpringRate: 57000,
                 rearSpringRate: 68000,
-                antiRollStiffnessFront: 18000,
-                antiRollStiffnessRear: 10000,
-                frontDampingRatio: 0.28,
-                rearDampingRatio: 0.30,
+                antiRollStiffnessFront: 22500,
+                antiRollStiffnessRear: 13500,
+                frontDampingRatio: 0.34,
+                rearDampingRatio: 0.36,
                 suspensionMaxDroop: 0.18,
                 suspensionMaxCompression: 0.14,
                 dampingCompression: 0.48,
@@ -124,17 +138,17 @@
                 maxHandbrakeForce: 2400,
                 brakeBiasFront: 0.74,
                 absSlipThreshold: 0.18,
-                frictionCoefficient: 0.96,
-                longitudinalStiffness: 5,
-                lateralStiffness: 4.5,
-                tireShapeFactor: 1.3,
+                frictionCoefficient: 0.98,
+                longitudinalStiffness: 4.8,
+                lateralStiffness: 6.0,
+                tireShapeFactor: 1.45,
                 wheelInertia: 0.25,
                 drivenAxle: 'rear',
                 maxSteeringAngle: 42 * Math.PI / 180,
-                steeringSpeedFalloff: 0.20,
-                steerInRate: 2.3,
-                steerReturnRate: 4.2,
-                steerGamma: 1.85,
+                steeringSpeedFalloff: 0.046,
+                steerInRate: 1.40,
+                steerReturnRate: 3.1,
+                steerGamma: 2.05,
                 frontSpringRate: 11500,
                 rearSpringRate: 26000,
                 frontDampingRatio: 0.32,
@@ -182,10 +196,38 @@
         
         let score = 0;
         let isGameOver = false;
+        let isPaused = false;
+        function getCameraPreset(mode, vehicleType = selectedVehicleType) {
+            const physics = vehiclePhysicsConfigs[vehicleType] || vehiclePhysicsConfigs.car;
+            const cgHeight = physics.cgHeight;
+            if (mode === 1) {
+                const isMoto = vehicleType === 'motorcycle';
+                const backDist = isMoto ? 3.35 : 5.25;
+                const camHeight = isMoto ? 1.65 : 2.15;
+                const focusHeight = isMoto ? 0.78 : 0.95;
+                const heightDelta = camHeight - focusHeight;
+                return {
+                    distance: Math.hypot(backDist, heightDelta),
+                    focusHeight,
+                    neutralPitch: Math.atan2(heightDelta, backDist),
+                    minDistance: isMoto ? 1.8 : 2.6
+                };
+            }
+            const hoodBackDist = 1.35;
+            const hoodHeight = 1.25;
+            const hoodDelta = hoodHeight - cgHeight;
+            return {
+                distance: Math.hypot(hoodBackDist, hoodDelta),
+                focusHeight: cgHeight,
+                neutralPitch: Math.atan2(hoodDelta, hoodBackDist),
+                minDistance: 0.75
+            };
+        }
+
         let cameraMode = 1; // 1: Belakang, 2: Kap Mesin
         const cameraOrbits = {
-            1: { yaw: 0, pitch: 0, yawVelocity: 0, pitchVelocity: 0, distance: Math.hypot(9, 3) },
-            2: { yaw: 0, pitch: 0, yawVelocity: 0, pitchVelocity: 0, distance: Math.hypot(1.35, 0.75) }
+            1: { yaw: 0, pitch: 0, yawVelocity: 0, pitchVelocity: 0, distance: getCameraPreset(1, 'car').distance },
+            2: { yaw: 0, pitch: 0, yawVelocity: 0, pitchVelocity: 0, distance: getCameraPreset(2, 'car').distance }
         };
         let isCameraDragging = false;
         let lastCameraPointerX = 0;
@@ -207,6 +249,19 @@
         let lastPlayerSegmentIndex = -1;
         let bonusScore = 0;
         let bestScore = Number(localStorage.getItem('speed_of_nusantara_best_score') || 0);
+        const storedBestLapMs = Number(localStorage.getItem('speed_of_nusantara_best_lap_ms') || 0);
+        let bestLapTimeSeconds = storedBestLapMs > 0 ? storedBestLapMs / 1000 : null;
+        let currentLap = 1;
+        let lapRawElapsedSeconds = 0;
+        let lapNearMissBonusSeconds = 0;
+        let lapTimeSeconds = 0;
+        let lastLapTimeSeconds = null;
+        let hasNewLapRecordThisRun = false;
+        let lapTrackProgressAccumulator = 0;
+        let prevLapTrackProgress = 0.08;
+        let lapBannerTimer = 0;
+        let startCountdownTimer = 0;
+        let startGoFlashTimer = 0;
         let cameraShakeIntensity = 0;
         let nearMissBannerTimer = 0;
         let isAudioMuted = false;

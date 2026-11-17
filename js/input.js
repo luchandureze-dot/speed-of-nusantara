@@ -6,6 +6,12 @@
                 return;
             }
             if (!hasStarted) return;
+            if ((e.key === 'Escape' || e.key === 'p' || e.key === 'P') && !e.repeat) {
+                e.preventDefault();
+                if (typeof togglePauseGame === 'function') togglePauseGame();
+                return;
+            }
+            if (isPaused) return;
             if (e.key === 'w' || e.key === 'ArrowUp') keys.forward = true;
             if (e.key === 's' || e.key === 'ArrowDown') keys.backward = true;
             if (e.key === 'a' || e.key === 'ArrowLeft') keys.left = true;
@@ -14,8 +20,20 @@
                 e.preventDefault();
                 keys.handbrake = true;
             }
-            if (e.key === 'c' || e.key === 'C') {
+            if ((e.key === 'c' || e.key === 'C') && !e.repeat) {
                 cameraMode = cameraMode === 1 ? 2 : 1;
+            }
+            if (e.key === 'x' || e.key === 'X') {
+                keys.lookBack = true;
+            }
+            if ((e.key === 'm' || e.key === 'M') && !e.repeat) {
+                toggleTransmissionMode();
+            }
+            if ((e.key === '>' || e.key === '.' || e.code === 'Period') && !e.repeat) {
+                shiftGearUp();
+            }
+            if ((e.key === '<' || e.key === ',' || e.code === 'Comma') && !e.repeat) {
+                shiftGearDown();
             }
         }
 
@@ -25,6 +43,7 @@
             if (e.key === 's' || e.key === 'ArrowDown') keys.backward = false;
             if (e.key === 'a' || e.key === 'ArrowLeft') keys.left = false;
             if (e.key === 'd' || e.key === 'ArrowRight') keys.right = false;
+            if (e.key === 'x' || e.key === 'X') keys.lookBack = false;
             if (e.code === 'Space' || e.key === ' ') {
                 if (hasStarted) e.preventDefault();
                 keys.handbrake = false;
@@ -43,7 +62,7 @@
         function setupCameraControls(canvas) {
             canvas.style.cursor = 'grab';
             canvas.addEventListener('pointerdown', event => {
-                if (!hasStarted || event.button !== 0) return;
+                if (!hasStarted || isPaused || event.button !== 0) return;
 
                 isCameraDragging = true;
                 lastCameraPointerX = event.clientX;
@@ -60,10 +79,7 @@
 
                 const orbit = cameraOrbits[cameraMode];
                 orbit.yaw -= (event.clientX - lastCameraPointerX) * 0.005;
-                const cgHeight = vehiclePhysicsConfigs[selectedVehicleType].cgHeight;
-                const neutralPitch = cameraMode === 1
-                    ? Math.atan2(3.5 - cgHeight, 9)
-                    : Math.atan2(1.25 - cgHeight, 1.35);
+                const neutralPitch = getCameraPreset(cameraMode, selectedVehicleType).neutralPitch;
                 orbit.pitch = Math.max(
                     -0.15 - neutralPitch,
                     Math.min(
@@ -88,11 +104,11 @@
             canvas.addEventListener('pointercancel', stopDragging);
 
             canvas.addEventListener('wheel', event => {
-                if (!hasStarted) return;
+                if (!hasStarted || isPaused) return;
 
                 event.preventDefault();
                 const orbit = cameraOrbits[cameraMode];
-                const minimumDistance = cameraMode === 1 ? 3 : 0.75;
+                const minimumDistance = getCameraPreset(cameraMode, selectedVehicleType).minDistance;
                 orbit.distance = Math.max(
                     minimumDistance,
                     Math.min(40, orbit.distance * Math.exp(event.deltaY * 0.001))
@@ -106,7 +122,12 @@
             keys.left = false;
             keys.right = false;
             keys.handbrake = false;
+            keys.lookBack = false;
             steeringInputSmoothed = 0;
+            throttleSmoothed = 0;
+            brakeSmoothed = 0;
+            reverseSmoothed = 0;
+            gearShiftBlendTimer = 0;
             throttleVisual = 0;
             brakeVisual = 0;
             handbrakeVisual = 0;
@@ -140,7 +161,7 @@
                 };
 
                 button.addEventListener('pointerdown', event => {
-                    if (!hasStarted || isGameOver) return;
+                    if (!hasStarted || isPaused || isGameOver) return;
                     event.preventDefault();
                     initGameAudio();
                     activePointers.add(event.pointerId);
@@ -155,9 +176,43 @@
             const camButton = document.getElementById('touch-camera');
             if (camButton) {
                 camButton.addEventListener('click', () => {
-                    if (!hasStarted || isGameOver) return;
+                    if (!hasStarted || isPaused || isGameOver) return;
                     cameraMode = cameraMode === 1 ? 2 : 1;
                 });
+            }
+
+            const transButton = document.getElementById('touch-transmission');
+            if (transButton) {
+                transButton.addEventListener('click', () => {
+                    if (!hasStarted || isPaused || isGameOver) return;
+                    toggleTransmissionMode();
+                });
+            }
+
+            const shiftUpButton = document.getElementById('touch-shift-up');
+            if (shiftUpButton) {
+                shiftUpButton.addEventListener('pointerdown', event => {
+                    if (!hasStarted || isPaused || isGameOver) return;
+                    event.preventDefault();
+                    shiftGearUp();
+                    shiftUpButton.classList.add('is-active');
+                });
+                const releaseUp = () => shiftUpButton.classList.remove('is-active');
+                shiftUpButton.addEventListener('pointerup', releaseUp);
+                shiftUpButton.addEventListener('pointercancel', releaseUp);
+            }
+
+            const shiftDownButton = document.getElementById('touch-shift-down');
+            if (shiftDownButton) {
+                shiftDownButton.addEventListener('pointerdown', event => {
+                    if (!hasStarted || isPaused || isGameOver) return;
+                    event.preventDefault();
+                    shiftGearDown();
+                    shiftDownButton.classList.add('is-active');
+                });
+                const releaseDown = () => shiftDownButton.classList.remove('is-active');
+                shiftDownButton.addEventListener('pointerup', releaseDown);
+                shiftDownButton.addEventListener('pointercancel', releaseDown);
             }
         }
 

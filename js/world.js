@@ -165,27 +165,69 @@
                 scene.add(shoulderLine);
             });
 
-            // Pembatas mengikuti sisi luar jalan.
-            const barrierMaterial = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.85 });
-            [-8.5, 8.5].forEach(offset => {
-                const barrierPoints = [];
+            // Tembok pembatas beton tebal & rapat tanpa celah di sisi kiri dan kanan jalan tol (±7,85 m s/d ±8,85 m).
+            const barrierMaterial = new THREE.MeshStandardMaterial({
+                color: 0x8f96a0,
+                roughness: 0.88,
+                metalness: 0.08
+            });
+            const barrierProfile = [
+                { off: 0.0, y: -0.28 },   // Dasar tertanam rapat di bawah tepi aspal agar bebas celah
+                { off: 0.0, y: 0.28 },    // Bagian bawah miring ala Jersey barrier
+                { off: 0.14, y: 1.18 },   // Dinding dalam tebal setinggi 1,18 m
+                { off: 0.96, y: 1.18 },   // Puncak tembok beton tebal (~0,82 m)
+                { off: 0.96, y: -0.28 }   // Sisi luar tembok menutup rapat ke bawah
+            ];
+            const ringVertCount = barrierProfile.length;
+
+            [-1, 1].forEach(sideSign => {
+                const positions = [];
+                const indices = [];
+
                 for (let i = 0; i < trackResolution; i++) {
                     const t = i / trackResolution;
                     const point = trackCurve.getPointAt(t);
                     const tangent = trackCurve.getTangentAt(t);
-                    barrierPoints.push(new THREE.Vector3(
-                        point.x - tangent.z * offset,
-                        point.y + 0.55,
-                        point.z + tangent.x * offset
-                    ));
+                    const outX = -tangent.z * sideSign;
+                    const outZ = tangent.x * sideSign;
+
+                    for (let p = 0; p < ringVertCount; p++) {
+                        const dist = 7.85 + barrierProfile[p].off;
+                        positions.push(
+                            point.x + outX * dist,
+                            point.y + barrierProfile[p].y,
+                            point.z + outZ * dist
+                        );
+                    }
                 }
-                const barrierCurve = new THREE.CatmullRomCurve3(barrierPoints, true, 'centripetal');
-                const barrier = new THREE.Mesh(
-                    new THREE.TubeGeometry(barrierCurve, trackResolution, 0.48, 8, true),
-                    barrierMaterial
-                );
-                barrier.castShadow = true;
-                scene.add(barrier);
+
+                for (let i = 0; i < trackResolution; i++) {
+                    const nextI = (i + 1) % trackResolution;
+                    const baseA = i * ringVertCount;
+                    const baseB = nextI * ringVertCount;
+
+                    for (let p = 0; p < ringVertCount - 1; p++) {
+                        const a0 = baseA + p;
+                        const a1 = baseA + p + 1;
+                        const b0 = baseB + p;
+                        const b1 = baseB + p + 1;
+                        if (sideSign > 0) {
+                            indices.push(a0, a1, b0, a1, b1, b0);
+                        } else {
+                            indices.push(a0, b0, a1, a1, b0, b1);
+                        }
+                    }
+                }
+
+                const wallGeometry = new THREE.BufferGeometry();
+                wallGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                wallGeometry.setIndex(indices);
+                wallGeometry.computeVertexNormals();
+
+                const barrierWall = new THREE.Mesh(wallGeometry, barrierMaterial);
+                barrierWall.castShadow = true;
+                barrierWall.receiveShadow = true;
+                scene.add(barrierWall);
             });
 
             // Lampu Jalan Tol (PJU) menggunakan InstancedMesh agar ringan.

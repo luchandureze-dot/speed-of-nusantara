@@ -1,10 +1,13 @@
         function resetPlayerPosition() {
+            const rollingSpeed = 60 / 3.6;
+            const leftLaneLateral = -4.8;
+            const physics = vehiclePhysicsConfigs[selectedVehicleType];
             playerTrackProgress = 0.08;
             const point = trackCurve.getPointAt(playerTrackProgress);
-            const tangent = trackCurve.getTangentAt(playerTrackProgress);
-            playerX = point.x;
+            const tangent = trackCurve.getTangentAt(playerTrackProgress).normalize();
+            playerX = point.x - tangent.z * leftLaneLateral;
             playerY = point.y;
-            playerZ = point.z;
+            playerZ = point.z + tangent.x * leftLaneLateral;
             playerYaw = Math.atan2(-tangent.x, -tangent.z);
             yawRate = 0;
             bodyRoll = 0;
@@ -15,16 +18,23 @@
             motorcyclePitchVelocity = 0;
             motorcycleFrontWheelLifted = false;
             motorcycleRearWheelLifted = false;
-            roadPitchAngle = 0;
-            roadSlopeSin = 0;
+            roadPitchAngle = Math.asin(THREE.MathUtils.clamp(tangent.y, -0.45, 0.45));
+            roadSlopeSin = Math.sin(roadPitchAngle);
             steeringInputSmoothed = 0;
-            velocityX = 0;
-            velocityZ = 0;
-            playerRoadLateral = 0;
+            throttleSmoothed = 0.28;
+            brakeSmoothed = 0;
+            reverseSmoothed = 0;
+            gearShiftBlendTimer = 0;
+            velocityX = tangent.x * rollingSpeed;
+            velocityZ = tangent.z * rollingSpeed;
+            playerRoadLateral = leftLaneLateral;
             longitudinalAcceleration = 0;
             lateralAcceleration = 0;
-            wheelAngularSpeeds = wheelAngularSpeeds.map(() => 0);
-            carSpeed = 0;
+            wheelAngularSpeeds = tireLayout.length
+                ? tireLayout.map(tire => rollingSpeed / (tire.wheelRadius || physics.wheelRadius))
+                : wheelAngularSpeeds.map(() => rollingSpeed / physics.wheelRadius);
+            carSpeed = rollingSpeed;
+            currentGear = physics.isCvt ? 2 : 3;
             verticalVelocity = 0;
             isAirborne = false;
             chassisSuspensionOffset = 0;
@@ -110,13 +120,17 @@
                     }
                 ];
             }
+            const rollingSpeed = 60 / 3.6;
             tireLayout.forEach(tire => {
                 tire.steeringAngle = 0;
                 tire.skidIntensity = 0;
                 tire.worldVelX = 0;
                 tire.worldVelZ = 0;
+                tire.longitudinalVelocity = rollingSpeed;
             });
-            wheelAngularSpeeds = tireLayout.map(() => 0);
+            wheelAngularSpeeds = tireLayout.map(
+                tire => rollingSpeed / (tire.wheelRadius || physics.wheelRadius)
+            );
         }
 
         function addLicensePlate(parent, text, width, height, z, y, front) {
@@ -399,6 +413,9 @@
                     : -maxDroop;
                 wheelPivot.position.y = wheelPivot.userData.basePositionY +
                     roadTravel + wheelPivot.userData.suspensionTravel * 0.25;
+                const maxVisualSteer = isMotorcycle ? physics.maxSteeringAngle : physics.maxInnerWheelSteerAngle;
+                const rawVisualSteer = frontAxle ? (tire.steeringAngle || 0) * 1.25 : 0;
+                const clampedVisualSteer = THREE.MathUtils.clamp(rawVisualSteer, -maxVisualSteer, maxVisualSteer);
                 if (!isMotorcycle) {
                     const staticCamberRad = THREE.MathUtils.degToRad(
                         frontAxle ? physics.frontCamberDeg : physics.rearCamberDeg
@@ -408,11 +425,10 @@
                     );
                     wheelPivot.rotation.z = -Math.sign(tire.x) * staticCamberRad;
                     wheelPivot.userData.steeringPivot.rotation.y =
-                        (tire.steeringAngle || 0) + Math.sign(tire.x) * staticToeRad;
+                        clampedVisualSteer + Math.sign(tire.x) * staticToeRad;
                 } else {
                     wheelPivot.rotation.z = 0;
-                    wheelPivot.userData.steeringPivot.rotation.y =
-                        tire.steeringAngle || 0;
+                    wheelPivot.userData.steeringPivot.rotation.y = clampedVisualSteer;
                 }
                 const wheelSpinRate = wheelAngularSpeeds[index] !== undefined
                     ? wheelAngularSpeeds[index]
