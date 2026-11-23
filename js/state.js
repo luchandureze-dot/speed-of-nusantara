@@ -5,6 +5,14 @@
         let trackLength = 1;
         const trackResolution = 4000;
         let roadSegments = [];
+        const streetLightStations = [];
+        const nightLightingPool = {
+            initialized: false,
+            playerHeadlights: [],
+            playerTaillight: null,
+            npcHeadlights: [],
+            streetLights: []
+        };
         let playerX = 0;
         let playerY = 0;
         let playerZ = 0;
@@ -55,6 +63,8 @@
         let policeBustedTimer = 5;
         let policeThreatLevel = 0;
         let policeToastTimer = 0;
+        let policeEscalationElapsed = 0;
+        let policeRamPenaltyCooldown = 0;
         let damageAccelHits = 0;
         let damageTopSpeedHits = 0;
         let damageHandlingHits = 0;
@@ -202,9 +212,9 @@
             const cgHeight = physics.cgHeight;
             if (mode === 1) {
                 const isMoto = vehicleType === 'motorcycle';
-                const backDist = isMoto ? 3.35 : 5.25;
-                const camHeight = isMoto ? 1.65 : 2.15;
-                const focusHeight = isMoto ? 0.78 : 0.95;
+                const backDist = isMoto ? 3.15 : 4.95;
+                const camHeight = isMoto ? 1.42 : 1.80;
+                const focusHeight = isMoto ? 0.74 : 0.90;
                 const heightDelta = camHeight - focusHeight;
                 return {
                     distance: Math.hypot(backDist, heightDelta),

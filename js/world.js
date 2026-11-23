@@ -66,7 +66,8 @@
             roadGeometry.computeVertexNormals();
             const roadMaterial = new THREE.MeshStandardMaterial({
                 color: 0xffffff,
-                roughness: 0.8,
+                roughness: 0.92,
+                metalness: 0.01,
                 side: THREE.DoubleSide
             });
             const roadTextureLoader = new THREE.TextureLoader();
@@ -103,8 +104,8 @@
                     throw new Error('Gagal menyiapkan tekstur warna aspal.');
                 }
                 context.drawImage(texture.image, 0, 0);
-                context.globalAlpha = 0.9;
-                context.fillStyle = '#555555';
+                context.globalAlpha = 0.78;
+                context.fillStyle = '#22252b';
                 context.fillRect(0, 0, canvas.width, canvas.height);
 
                 const softenedTexture = new THREE.CanvasTexture(canvas);
@@ -138,14 +139,14 @@
                 const lineGeometry = new THREE.BufferGeometry().setFromPoints(linePoints);
                 const line = new THREE.Line(
                     lineGeometry,
-                    new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 7, gapSize: 6 })
+                    new THREE.LineDashedMaterial({ color: 0x9aa4b2, dashSize: 3, gapSize: 5 })
                 );
                 line.computeLineDistances();
                 scene.add(line);
             });
 
             // Garis bahu jalan solid di tepi kiri dan kanan tol (±7,2 m dari tengah, menyisakan 0,8 m tepi luar).
-            const shoulderLineMaterial = new THREE.LineBasicMaterial({ color: 0xffcc33 });
+            const shoulderLineMaterial = new THREE.LineBasicMaterial({ color: 0xa68324 });
             [-7.2, 7.2].forEach(offset => {
                 const shoulderPoints = [];
                 for (let i = 0; i <= trackResolution; i++) {
@@ -165,11 +166,66 @@
                 scene.add(shoulderLine);
             });
 
+            // Mata kucing marka lajur & reflektor pembatas beton (InstancedMesh untuk aliran optik kecepatan tinggi).
+            const reflectorCount = 250;
+            const laneStudGeo = new THREE.BoxGeometry(0.14, 0.032, 0.16);
+            const laneStudMat = new THREE.MeshBasicMaterial({ color: 0xd8e6ff });
+            const laneStudInstances = new THREE.InstancedMesh(laneStudGeo, laneStudMat, reflectorCount * 2);
+            const wallRefGeo = new THREE.BoxGeometry(0.04, 0.09, 0.24);
+            const leftWallRefMat = new THREE.MeshBasicMaterial({ color: 0xffa726 });
+            const rightWallRefMat = new THREE.MeshBasicMaterial({ color: 0xffe6a3 });
+            const leftWallRefInstances = new THREE.InstancedMesh(wallRefGeo, leftWallRefMat, reflectorCount);
+            const rightWallRefInstances = new THREE.InstancedMesh(wallRefGeo, rightWallRefMat, reflectorCount);
+            const refDummy = new THREE.Object3D();
+            let studIdx = 0;
+            for (let i = 0; i < reflectorCount; i++) {
+                const t = i / reflectorCount;
+                const point = trackCurve.getPointAt(t);
+                const tangent = trackCurve.getTangentAt(t);
+                const yaw = Math.atan2(-tangent.x, -tangent.z);
+                refDummy.rotation.set(0, yaw, 0);
+
+                [-2.4, 2.4].forEach(offset => {
+                    refDummy.position.set(
+                        point.x - tangent.z * offset,
+                        point.y + 0.058,
+                        point.z + tangent.x * offset
+                    );
+                    refDummy.updateMatrix();
+                    laneStudInstances.setMatrixAt(studIdx++, refDummy.matrix);
+                });
+
+                refDummy.position.set(
+                    point.x - tangent.z * (-7.84),
+                    point.y + 0.72,
+                    point.z + tangent.x * (-7.84)
+                );
+                refDummy.updateMatrix();
+                leftWallRefInstances.setMatrixAt(i, refDummy.matrix);
+
+                refDummy.position.set(
+                    point.x - tangent.z * 7.84,
+                    point.y + 0.72,
+                    point.z + tangent.x * 7.84
+                );
+                refDummy.updateMatrix();
+                rightWallRefInstances.setMatrixAt(i, refDummy.matrix);
+            }
+            laneStudInstances.instanceMatrix.needsUpdate = true;
+            leftWallRefInstances.instanceMatrix.needsUpdate = true;
+            rightWallRefInstances.instanceMatrix.needsUpdate = true;
+            laneStudInstances.frustumCulled = false;
+            leftWallRefInstances.frustumCulled = false;
+            rightWallRefInstances.frustumCulled = false;
+            scene.add(laneStudInstances);
+            scene.add(leftWallRefInstances);
+            scene.add(rightWallRefInstances);
+
             // Tembok pembatas beton tebal & rapat tanpa celah di sisi kiri dan kanan jalan tol (±7,85 m s/d ±8,85 m).
             const barrierMaterial = new THREE.MeshStandardMaterial({
-                color: 0x8f96a0,
-                roughness: 0.88,
-                metalness: 0.08
+                color: 0x363b42,
+                roughness: 0.90,
+                metalness: 0.06
             });
             const barrierProfile = [
                 { off: 0.0, y: -0.28 },   // Dasar tertanam rapat di bawah tepi aspal agar bebas celah
@@ -225,22 +281,33 @@
                 wallGeometry.computeVertexNormals();
 
                 const barrierWall = new THREE.Mesh(wallGeometry, barrierMaterial);
-                barrierWall.castShadow = true;
+                barrierWall.castShadow = false;
                 barrierWall.receiveShadow = true;
                 scene.add(barrierWall);
             });
 
             // Lampu Jalan Tol (PJU) menggunakan InstancedMesh agar ringan.
-            const streetLightCount = 72;
+            streetLightStations.length = 0;
+            const streetLightCount = 108;
             const totalLamps = streetLightCount * 2;
             const poleGeo = new THREE.CylinderGeometry(0.11, 0.16, 7.2, 8);
             const poleMat = new THREE.MeshStandardMaterial({ color: 0x4b5360, roughness: 0.65, metalness: 0.6 });
             const armGeo = new THREE.BoxGeometry(2.4, 0.14, 0.14);
             const lampGeo = new THREE.BoxGeometry(0.95, 0.14, 0.42);
-            const lampMat = new THREE.MeshBasicMaterial({ color: 0xffdfa0 });
+            const lampMat = new THREE.MeshBasicMaterial({ color: 0xffe2a8 });
+            const lampHaloGeo = new THREE.SphereGeometry(0.56, 8, 6);
+            const lampHaloMat = new THREE.MeshBasicMaterial({
+                color: 0xffb862,
+                transparent: true,
+                opacity: 0.30,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+
             const poleInstances = new THREE.InstancedMesh(poleGeo, poleMat, totalLamps);
             const armInstances = new THREE.InstancedMesh(armGeo, poleMat, totalLamps);
             const lampInstances = new THREE.InstancedMesh(lampGeo, lampMat, totalLamps);
+            const lampHaloInstances = new THREE.InstancedMesh(lampHaloGeo, lampHaloMat, totalLamps);
             const lampDummy = new THREE.Object3D();
             let instanceIndex = 0;
 
@@ -249,6 +316,11 @@
                 const point = trackCurve.getPointAt(t);
                 const tangent = trackCurve.getTangentAt(t);
                 const yaw = Math.atan2(-tangent.x, -tangent.z);
+                streetLightStations.push({
+                    x: point.x,
+                    y: point.y + 6.9,
+                    z: point.z
+                });
                 [-9.3, 9.3].forEach(sideOffset => {
                     const sideSign = Math.sign(sideOffset);
                     const px = point.x - tangent.z * sideOffset;
@@ -271,12 +343,25 @@
                     lampDummy.updateMatrix();
                     lampInstances.setMatrixAt(instanceIndex, lampDummy.matrix);
 
+                    lampDummy.position.set(bulbX, point.y + 6.78, bulbZ);
+                    lampDummy.updateMatrix();
+                    lampHaloInstances.setMatrixAt(instanceIndex, lampDummy.matrix);
+
                     instanceIndex += 1;
                 });
             }
+            poleInstances.instanceMatrix.needsUpdate = true;
+            armInstances.instanceMatrix.needsUpdate = true;
+            lampInstances.instanceMatrix.needsUpdate = true;
+            lampHaloInstances.instanceMatrix.needsUpdate = true;
+            poleInstances.frustumCulled = false;
+            armInstances.frustumCulled = false;
+            lampInstances.frustumCulled = false;
+            lampHaloInstances.frustumCulled = false;
             scene.add(poleInstances);
             scene.add(armInstances);
             scene.add(lampInstances);
+            scene.add(lampHaloInstances);
 
             // Rambu Portal Tol Hijau khas Indonesia.
             const gantrySpecs = [
@@ -321,7 +406,12 @@
                 ctx.fillText(spec.subtitle, signCanvas.width / 2, 186);
 
                 const signTexture = new THREE.CanvasTexture(signCanvas);
-                const signMat = new THREE.MeshBasicMaterial({ map: signTexture, side: THREE.DoubleSide });
+                const signMat = new THREE.MeshStandardMaterial({
+                    map: signTexture,
+                    roughness: 0.52,
+                    metalness: 0.08,
+                    side: THREE.DoubleSide
+                });
                 const signBoard = new THREE.Mesh(new THREE.BoxGeometry(11.6, 2.7, 0.18), [
                     gantrySteelMat, gantrySteelMat, gantrySteelMat, gantrySteelMat, signMat, signMat
                 ]);
@@ -349,13 +439,13 @@
             buildingCanvas.width = 256;
             buildingCanvas.height = 512;
             const bCtx = buildingCanvas.getContext('2d');
-            bCtx.fillStyle = '#111624';
+            bCtx.fillStyle = '#03050a';
             bCtx.fillRect(0, 0, 256, 512);
             for (let row = 12; row < 500; row += 20) {
                 for (let col = 10; col < 246; col += 18) {
                     const lit = ((row * 31 + col * 17) % 11) < 4;
                     if (lit) {
-                        bCtx.fillStyle = ((row + col) % 3 === 0) ? '#ffe099' : '#9ed4ff';
+                        bCtx.fillStyle = ((row + col) % 3 === 0) ? '#ffd685' : '#96d0ff';
                         bCtx.fillRect(col, row, 10, 11);
                     }
                 }
@@ -366,10 +456,11 @@
             const buildingMat = new THREE.MeshStandardMaterial({
                 map: buildingTexture,
                 emissiveMap: buildingTexture,
-                emissive: 0x8899bb,
-                emissiveIntensity: 0.45,
-                roughness: 0.85
+                emissive: 0xffffff,
+                emissiveIntensity: 1.05,
+                roughness: 0.88
             });
+            const rooftopBeaconMat = new THREE.MeshBasicMaterial({ color: 0xff453a });
 
             let seed = 1337;
             const seededRandom = () => {
@@ -399,6 +490,12 @@
                 const building = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), buildingMat);
                 building.position.set(bx, height / 2 - 2, bz);
                 scene.add(building);
+
+                if (height > 68) {
+                    const beacon = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.9), rooftopBeaconMat);
+                    beacon.position.set(bx, height - 1.6, bz);
+                    scene.add(beacon);
+                }
             }
 
             if (trafficSpawnTimer) {

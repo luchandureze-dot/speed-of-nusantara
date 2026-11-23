@@ -290,6 +290,9 @@
         function toggleAudioMute() {
             isAudioMuted = !isAudioMuted;
             updateAudioButtonUi();
+            if (window.gameMusicPlayer && typeof window.gameMusicPlayer.syncMute === 'function') {
+                window.gameMusicPlayer.syncMute(isAudioMuted);
+            }
             if (!isAudioMuted) {
                 initGameAudio();
             } else if (audioCtx && engineGain && roadGain && brakeGain && scrapeGain) {
@@ -299,7 +302,6 @@
                 brakeGain.gain.setTargetAtTime(0, now, 0.04);
                 scrapeGain.gain.setTargetAtTime(0, now, 0.04);
                 if (sirenGain) sirenGain.gain.setTargetAtTime(0, now, 0.04);
-                stopPoliceVoice();
             }
         }
 
@@ -489,61 +491,46 @@
             }
         }
 
-        function stopPoliceVoice() {
+        function playNpcHornSound(gainScale = 0.2, pitchFactor = 1.0) {
+            if (!audioInitialized || !audioCtx || isAudioMuted) return;
             try {
-                if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis) {
-                    window.speechSynthesis.cancel();
-                }
-            } catch {
-                // Abaikan jika SpeechSynthesis tidak tersedia.
-            }
-        }
+                const now = audioCtx.currentTime;
+                const volume = THREE.MathUtils.clamp(gainScale, 0.02, 0.28);
+                const pulses = Math.random() < 0.45
+                    ? [{ offset: 0, dur: 0.13 }, { offset: 0.17, dur: 0.22 }]
+                    : [{ offset: 0, dur: 0.26 }];
 
-        function playPolicePullOverVoice() {
-            if (isAudioMuted) return;
-            try {
-                if (audioInitialized && audioCtx) {
-                    const now = audioCtx.currentTime;
-                    const chirpOsc = audioCtx.createOscillator();
-                    chirpOsc.type = 'square';
-                    chirpOsc.frequency.setValueAtTime(1180, now);
-                    chirpOsc.frequency.setValueAtTime(860, now + 0.055);
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(1650, now);
+                filter.Q.value = 1.1;
 
-                    const chirpFilter = audioCtx.createBiquadFilter();
-                    chirpFilter.type = 'bandpass';
-                    chirpFilter.frequency.value = 1100;
-                    chirpFilter.Q.value = 2.0;
+                const masterGain = audioCtx.createGain();
+                masterGain.gain.setValueAtTime(0.0001, now);
+                filter.connect(masterGain);
+                masterGain.connect(audioCtx.destination);
 
-                    const chirpGain = audioCtx.createGain();
-                    chirpGain.gain.setValueAtTime(0.07, now);
-                    chirpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+                let maxEnd = now;
+                pulses.forEach(pulse => {
+                    const start = now + pulse.offset;
+                    const end = start + pulse.dur;
+                    if (end > maxEnd) maxEnd = end;
+                    masterGain.gain.setValueAtTime(0.0001, start);
+                    masterGain.gain.linearRampToValueAtTime(volume, start + 0.018);
+                    masterGain.gain.setValueAtTime(volume * 0.9, end - 0.035);
+                    masterGain.gain.exponentialRampToValueAtTime(0.0001, end);
+                });
 
-                    chirpOsc.connect(chirpFilter);
-                    chirpFilter.connect(chirpGain);
-                    chirpGain.connect(audioCtx.destination);
-                    chirpOsc.start(now);
-                    chirpOsc.stop(now + 0.14);
-                }
-
-                if (typeof window !== 'undefined' && 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined') {
-                    const synth = window.speechSynthesis;
-                    if (!synth) return;
-                    if (synth.speaking) synth.cancel();
-
-                    const utterance = new SpeechSynthesisUtterance('Harap menepi sekarang juga!');
-                    utterance.lang = 'id-ID';
-                    utterance.rate = 1.06;
-                    utterance.pitch = 0.92;
-                    utterance.volume = 1.0;
-
-                    const voices = synth.getVoices ? synth.getVoices() : [];
-                    const idVoice = voices.find(v => /^id[-_]/i.test(v.lang)) ||
-                        voices.find(v => /indonesia/i.test(v.name));
-                    if (idVoice) utterance.voice = idVoice;
-
-                    synth.speak(utterance);
-                }
+                [405 * pitchFactor, 510 * pitchFactor].forEach((freq, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    osc.type = idx === 0 ? 'sawtooth' : 'triangle';
+                    osc.frequency.setValueAtTime(freq, now);
+                    osc.connect(filter);
+                    osc.start(now);
+                    osc.stop(maxEnd + 0.02);
+                });
             } catch (error) {
-                console.warn('Suara pengeras suara polisi gagal diputar:', error);
+                console.warn('Gagal memutar klakson NPC:', error);
             }
         }
+

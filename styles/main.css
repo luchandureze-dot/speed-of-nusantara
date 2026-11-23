@@ -28,21 +28,57 @@
             pointer-events: none;
             font-family: 'Broken15', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
+        #lap-hud {
+            position: fixed;
+            top: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 6;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            pointer-events: none;
+        }
         .dashboard-stats {
             display: flex;
             flex-direction: column;
-            align-items: flex-end;
-            margin-bottom: 6px;
+            align-items: center;
+            gap: 2px;
+            padding: 8px 24px 10px;
+            border-radius: 12px;
+            border: 1.5px solid rgba(255, 204, 0, 0.52);
+            background: rgba(8, 10, 16, 0.74);
+            backdrop-filter: blur(8px);
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), 0 0 18px rgba(255, 204, 0, 0.12);
         }
-        .stat {
-            font-size: 17px;
-            margin-bottom: 4px;
-            text-align: right;
+        .lap-hud-meta {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.14em;
+            color: #cfd5df;
+            text-shadow: none;
+        }
+        .lap-badge {
+            color: #ffcc00;
         }
         .stat-best {
-            font-size: 13px;
             color: #cfd5df;
-            margin-bottom: 4px;
+        }
+        .lap-timer-main {
+            font-family: 'Broken15', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: clamp(34px, 4.2vw, 48px);
+            line-height: 1.02;
+            font-weight: 900;
+            letter-spacing: 0.04em;
+            color: #ffffff;
+            font-variant-numeric: tabular-nums;
+            text-shadow: 0 2px 12px rgba(0, 0, 0, 0.85), 0 0 18px rgba(255, 204, 0, 0.24);
         }
         #speedometer {
             width: 236px;
@@ -250,29 +286,31 @@
             box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
         }
         #near-miss-toast {
-            margin-bottom: 10px;
-            padding: 6px 12px;
+            margin-bottom: 0;
+            padding: 5px 12px;
             border: 1px solid #ffcc00;
             border-radius: 6px;
-            background: rgba(255, 204, 0, 0.2);
+            background: rgba(255, 204, 0, 0.22);
             color: #ffe37a;
-            font-size: 14px;
+            font-size: 13px;
             letter-spacing: 0.05em;
+            white-space: nowrap;
         }
         #lap-complete-toast[hidden],
         #start-countdown[hidden] {
             display: none;
         }
         #lap-complete-toast {
-            margin-bottom: 10px;
-            padding: 7px 14px;
+            margin-bottom: 0;
+            padding: 6px 14px;
             border: 1px solid #22c55e;
             border-radius: 6px;
-            background: rgba(22, 163, 74, 0.25);
+            background: rgba(22, 163, 74, 0.28);
             color: #bbf7d0;
             font-size: 13px;
             font-weight: 700;
             letter-spacing: 0.06em;
+            white-space: nowrap;
         }
         #start-countdown {
             position: fixed;
@@ -316,7 +354,7 @@
         }
         #busted-banner {
             position: fixed;
-            top: 22px;
+            top: 124px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 12;
@@ -446,7 +484,7 @@
         }
         #crash-damage-toast {
             position: fixed;
-            top: 96px;
+            top: 196px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 14;
@@ -502,20 +540,23 @@
             border: 1px solid #444;
         }
         #hud-actions {
-            position: absolute;
+            position: fixed;
             left: 20px;
             bottom: 20px;
             display: flex;
             gap: 10px;
-            z-index: 5;
+            z-index: 21;
         }
         #controls-toggle,
-        #audio-toggle {
+        #audio-toggle,
+        #music-toggle {
+            position: relative;
             width: 38px;
             height: 38px;
             border: 1px solid #ffcc00;
             border-radius: 50%;
-            background: rgba(0, 0, 0, 0.75);
+            background: rgba(8, 10, 16, 0.82);
+            backdrop-filter: blur(8px);
             color: #ffcc00;
             font: inherit;
             font-size: 18px;
@@ -523,13 +564,399 @@
             cursor: pointer;
             display: grid;
             place-items: center;
+            transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
         }
         #controls-toggle:hover,
         #controls-toggle:focus-visible,
         #audio-toggle:hover,
-        #audio-toggle:focus-visible {
+        #audio-toggle:focus-visible,
+        #music-toggle:hover,
+        #music-toggle:focus-visible,
+        #music-toggle.is-open {
             background: #ffcc00;
             color: #111;
+        }
+        #music-toggle.is-playing::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #22c55e;
+            border: 1.5px solid #080a10;
+            box-shadow: 0 0 8px rgba(34, 197, 94, 0.9);
+        }
+        #music-drawer {
+            position: fixed;
+            left: 20px;
+            bottom: 70px;
+            z-index: 24;
+            width: min(340px, calc(100vw - 32px));
+            max-height: min(470px, calc(100vh - 110px));
+            box-sizing: border-box;
+            padding: 14px;
+            border-radius: 14px;
+            border: 1.5px solid rgba(255, 204, 0, 0.65);
+            background: rgba(10, 13, 22, 0.94);
+            backdrop-filter: blur(12px);
+            box-shadow: 0 18px 46px rgba(0, 0, 0, 0.68);
+            color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            user-select: text;
+        }
+        .music-drawer-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .music-drawer-title-group {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+        .music-drawer-kicker {
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.16em;
+            color: #ffcc00;
+        }
+        .music-drawer-title {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            color: #ffffff;
+        }
+        .music-icon-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 7px;
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            background: rgba(255, 255, 255, 0.08);
+            color: #e2e8f0;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            display: grid;
+            place-items: center;
+            flex-shrink: 0;
+        }
+        .music-icon-btn:hover:not(:disabled) {
+            border-color: #ffcc00;
+            color: #ffcc00;
+        }
+        .music-icon-btn:disabled {
+            opacity: 0.45;
+            cursor: default;
+        }
+        .music-user-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 6px 9px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .music-user-label {
+            font-size: 11px;
+            color: #cbd5e1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .music-signout-btn {
+            border: 1px solid rgba(248, 113, 113, 0.45);
+            background: rgba(239, 68, 68, 0.14);
+            color: #fecaca;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .music-signout-btn:hover {
+            background: rgba(239, 68, 68, 0.85);
+            color: #ffffff;
+        }
+        .music-auth-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 6px 6px;
+            text-align: center;
+        }
+        .music-auth-desc {
+            margin: 0;
+            font-size: 12px;
+            line-height: 1.45;
+            color: #cbd5e1;
+        }
+        .gsi-material-button {
+            -moz-user-select: none;
+            -webkit-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            -webkit-appearance: none;
+            background-color: #ffffff;
+            background-image: none;
+            border: 1px solid #747775;
+            border-radius: 4px;
+            box-sizing: border-box;
+            color: #1f1f1f;
+            cursor: pointer;
+            font-family: 'Roboto', 'Segoe UI', arial, sans-serif;
+            font-size: 14px;
+            height: 40px;
+            letter-spacing: 0.25px;
+            outline: none;
+            overflow: hidden;
+            padding: 0 12px;
+            position: relative;
+            text-align: center;
+            transition: background-color 0.218s, border-color 0.218s, box-shadow 0.218s;
+            vertical-align: middle;
+            white-space: nowrap;
+            width: auto;
+            max-width: 100%;
+            min-width: min-content;
+        }
+        .gsi-material-button .gsi-material-button-icon {
+            height: 20px;
+            margin-right: 12px;
+            min-width: 20px;
+            width: 20px;
+        }
+        .gsi-material-button .gsi-material-button-content-wrapper {
+            align-items: center;
+            display: flex;
+            flex-direction: row;
+            flex-wrap: nowrap;
+            height: 100%;
+            justify-content: space-between;
+            position: relative;
+            width: 100%;
+        }
+        .gsi-material-button .gsi-material-button-contents {
+            flex-grow: 1;
+            font-family: 'Roboto', 'Segoe UI', arial, sans-serif;
+            font-weight: 500;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            vertical-align: top;
+        }
+        .gsi-material-button .gsi-material-button-state {
+            transition: opacity 0.218s;
+            bottom: 0;
+            left: 0;
+            opacity: 0;
+            position: absolute;
+            right: 0;
+            top: 0;
+        }
+        .gsi-material-button:disabled {
+            cursor: default;
+            background-color: #ffffff61;
+            border-color: #1f1f1f1f;
+        }
+        .gsi-material-button:not(:disabled):hover {
+            box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.30), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+        }
+        .gsi-material-button:not(:disabled):hover .gsi-material-button-state {
+            background-color: #303030;
+            opacity: 0.08;
+        }
+        .music-player-box,
+        .music-library-box {
+            display: flex;
+            flex-direction: column;
+            gap: 9px;
+            min-height: 0;
+        }
+        .music-library-box {
+            padding-top: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        .music-now-playing {
+            padding: 8px 10px;
+            border-radius: 9px;
+            background: rgba(255, 204, 0, 0.08);
+            border: 1px solid rgba(255, 204, 0, 0.3);
+        }
+        .music-current-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #ffffff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .music-current-meta {
+            margin-top: 2px;
+            font-size: 11px;
+            color: #cbd5e1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .music-progress-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .music-range {
+            width: 100%;
+            accent-color: #ffcc00;
+            cursor: pointer;
+            height: 4px;
+        }
+        .music-time {
+            font-size: 10px;
+            font-variant-numeric: tabular-nums;
+            color: #94a3b8;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .music-controls-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .music-transport {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .music-ctrl-btn {
+            width: 32px;
+            height: 30px;
+            border-radius: 7px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.07);
+            color: #f8fafc;
+            font-size: 13px;
+            cursor: pointer;
+            display: grid;
+            place-items: center;
+        }
+        .music-ctrl-btn:hover:not(:disabled) {
+            border-color: #ffcc00;
+            color: #ffcc00;
+        }
+        .music-ctrl-btn:disabled {
+            opacity: 0.4;
+            cursor: default;
+        }
+        .music-ctrl-primary {
+            width: 38px;
+            background: #ffcc00;
+            border-color: #ffcc00;
+            color: #111827;
+            font-weight: 800;
+        }
+        .music-ctrl-primary:hover:not(:disabled) {
+            background: #ffd84d;
+            color: #111827;
+        }
+        .music-ctrl-btn.is-active {
+            border-color: #ffcc00;
+            background: rgba(255, 204, 0, 0.2);
+            color: #ffcc00;
+        }
+        .music-volume-wrap {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            min-width: 90px;
+            max-width: 110px;
+        }
+        .music-vol-icon {
+            font-size: 12px;
+            color: #ffcc00;
+        }
+        .music-search-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .music-search-input {
+            flex: 1;
+            min-width: 0;
+            padding: 6px 10px;
+            border-radius: 7px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(0, 0, 0, 0.45);
+            color: #ffffff;
+            font-size: 12px;
+            outline: none;
+        }
+        .music-search-input:focus {
+            border-color: #ffcc00;
+        }
+        .music-status-text {
+            margin: 0;
+            font-size: 11px;
+            color: #cbd5e1;
+            line-height: 1.35;
+        }
+        .music-status-text.is-error {
+            color: #fca5a5;
+        }
+        .music-track-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            overflow-y: auto;
+            max-height: 182px;
+            padding-right: 2px;
+        }
+        .music-track-item {
+            width: 100%;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 7px 9px;
+            border-radius: 7px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.04);
+            color: #e2e8f0;
+            font-size: 12px;
+            text-align: left;
+            cursor: pointer;
+        }
+        .music-track-item:hover {
+            border-color: rgba(255, 204, 0, 0.65);
+            background: rgba(255, 204, 0, 0.1);
+        }
+        .music-track-item.is-active {
+            border-color: #ffcc00;
+            background: rgba(255, 204, 0, 0.18);
+            color: #ffffff;
+        }
+        .music-track-name {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-weight: 600;
+        }
+        .music-track-size {
+            font-size: 10px;
+            color: #94a3b8;
+            flex-shrink: 0;
         }
         #pause-game {
             position: fixed;
@@ -648,134 +1075,170 @@
         @media (pointer: coarse), (max-width: 768px) {
             body.game-active #touch-controls {
                 display: flex;
-                inset: auto 12px 112px 12px;
+                inset: auto 10px 58px 10px;
             }
             .touch-right-stack {
-                gap: 6px;
+                gap: 5px;
             }
             .touch-cluster {
-                gap: 6px;
+                gap: 5px;
             }
             .touch-btn {
-                min-width: 48px;
-                height: 50px;
-                font-size: 13px;
+                min-width: 44px;
+                height: 44px;
+                font-size: 12px;
+                border-radius: 10px;
             }
             .touch-btn-small,
             .touch-btn-handbrake {
-                min-width: 42px;
-                font-size: 11px;
+                min-width: 38px;
+                font-size: 10px;
             }
             .touch-shifters .touch-btn-small {
-                height: 38px;
-                min-width: 40px;
+                height: 34px;
+                min-width: 36px;
             }
             #hud-actions {
-                left: 12px;
-                bottom: 14px;
+                left: 10px;
+                bottom: 10px;
                 gap: 6px;
             }
             #controls-toggle,
-            #audio-toggle {
-                width: 32px;
-                height: 32px;
-                font-size: 15px;
+            #audio-toggle,
+            #music-toggle {
+                width: 30px;
+                height: 30px;
+                font-size: 14px;
+            }
+            #music-drawer {
+                left: 10px;
+                bottom: 48px;
+                width: calc(100vw - 20px);
+                max-width: 340px;
             }
             #dashboard {
-                right: auto;
-                left: 50%;
-                top: auto;
-                bottom: 10px;
-                transform: translateX(-50%);
-                align-items: center;
+                inset: 0;
+                pointer-events: none;
+                display: block;
+            }
+            #lap-hud {
+                top: 10px;
+                gap: 4px;
+            }
+            .dashboard-stats {
+                padding: 5px 14px 6px;
+                border-radius: 10px;
+            }
+            .lap-hud-meta {
+                gap: 10px;
+                font-size: 9px;
+            }
+            .lap-timer-main {
+                font-size: clamp(24px, 6.2vw, 32px);
+            }
+            #busted-banner {
+                top: 102px;
+                padding: 7px 16px;
+            }
+            #crash-damage-toast {
+                top: 170px;
+            }
+            #damage-hud {
+                position: fixed;
+                top: 12px;
+                right: 12px;
+                width: auto;
+                max-width: 170px;
+                margin-bottom: 0;
+                padding: 4px 8px;
+                border-radius: 7px;
+            }
+            .damage-hud-title {
+                font-size: 8px;
+            }
+            #damage-hud-details {
+                font-size: 10px;
+            }
+            #near-miss-toast,
+            #lap-complete-toast {
+                padding: 4px 9px;
+                font-size: 11px;
             }
             #police-alert-toast {
-                bottom: 186px;
-                padding: 8px 14px;
-                font-size: 13px;
+                bottom: 112px;
+                padding: 7px 12px;
+                font-size: 12px;
                 max-width: calc(100vw - 24px);
                 white-space: normal;
                 text-align: center;
             }
-            .dashboard-stats {
-                flex-direction: row;
+            #speedometer {
+                position: fixed;
+                left: 50%;
+                bottom: 8px;
+                transform: translateX(-50%);
+                width: auto;
+                min-width: 204px;
+                max-width: calc(100vw - 96px);
+                padding: 6px 12px;
+                border-radius: 999px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 10px;
+            }
+            .cluster-top {
+                display: flex;
                 align-items: center;
                 gap: 10px;
-                margin-bottom: 4px;
             }
-            .stat {
-                font-size: 11px;
-                margin-bottom: 0;
-                text-align: center;
-            }
-            .stat-best {
-                font-size: 10px;
-                margin-bottom: 0;
-            }
-            #speedometer {
-                width: 184px;
-                padding: 8px 10px;
-                border-radius: 10px;
+            .speed-block {
+                align-items: baseline;
+                gap: 3px;
             }
             #speed-value {
-                font-size: 26px;
+                font-size: 20px;
+                line-height: 1;
             }
             #speed-unit {
-                font-size: 9px;
+                font-size: 8px;
+                letter-spacing: 0.08em;
             }
             .gear-block {
-                min-width: 34px;
-                padding: 2px 6px;
+                flex-direction: row;
+                align-items: baseline;
+                gap: 4px;
+                min-width: auto;
+                padding: 2px 7px;
+                border-radius: 999px;
             }
             #gear-label {
                 font-size: 8px;
+                letter-spacing: 0.08em;
             }
             #gear-value {
-                font-size: 15px;
+                font-size: 13px;
+                line-height: 1;
             }
-            .speed-bar-track {
-                margin-top: 5px;
-                height: 4px;
+            .speed-bar-track,
+            .rpm-bar-track,
+            .telemetry-row {
+                display: none;
             }
             .rpm-section {
-                margin-top: 6px;
+                margin-top: 0;
+                padding-left: 8px;
+                border-left: 1px solid rgba(255, 255, 255, 0.16);
             }
             #engine-readout {
-                font-size: 9px;
-                margin-bottom: 3px;
+                margin-bottom: 0;
+                gap: 4px;
+                font-size: 10px;
+                letter-spacing: 0.05em;
             }
-            .rpm-bar-track {
-                height: 5px;
-            }
-            .telemetry-row {
-                margin-top: 7px;
-                padding-top: 6px;
-                gap: 8px;
-            }
-            .steering-meter {
-                gap: 5px;
-            }
-            .telemetry-label,
-            .pedal-label {
+            .rpm-label {
                 font-size: 8px;
-            }
-            #steering-wheel-icon {
-                width: 19px;
-                height: 19px;
-            }
-            .steer-track {
-                height: 6px;
-            }
-            #steer-indicator-dot {
-                width: 9px;
-                height: 9px;
-            }
-            .pedals-meter {
-                gap: 6px;
-            }
-            .pedal-bar-track {
-                width: 10px;
-                height: 28px;
+                color: #9fa6b2;
             }
         }
         #game-over {
@@ -1049,10 +1512,16 @@
         }
         body:not(.game-active) #dashboard,
         body:not(.game-active) #pause-game,
-        body:not(.game-active) #hud-actions,
         body:not(.game-active) #controls-hint,
         body:not(.game-active) #touch-controls {
             visibility: hidden;
+        }
+        body:not(.game-active):not(.vehicle-selection-open) #hud-actions,
+        body:not(.game-active):not(.vehicle-selection-open) #music-drawer {
+            visibility: hidden;
+        }
+        body:not(.game-active) #controls-toggle {
+            display: none;
         }
         #loading-screen {
             z-index: 30;

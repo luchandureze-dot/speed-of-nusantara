@@ -329,6 +329,60 @@
             [...carGroup.children].forEach(child => {
                 if (!child.userData.isWheelPivot) bodyContent.add(child);
             });
+            const headFlareGeo = new THREE.SphereGeometry(0.16, 10, 8);
+            const headFlareMat = new THREE.MeshBasicMaterial({
+                color: 0xfff8e4,
+                transparent: true,
+                opacity: 0.92,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            const tailFlareGeo = new THREE.SphereGeometry(0.11, 8, 6);
+            const tailFlareMat = new THREE.MeshBasicMaterial({
+                color: 0xff2216,
+                transparent: true,
+                opacity: 0.58,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            const tailHaloGeo = new THREE.SphereGeometry(0.23, 8, 6);
+            const tailHaloMat = new THREE.MeshBasicMaterial({
+                color: 0xff160d,
+                transparent: true,
+                opacity: 0.20,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+
+            const headlightPoints = isMotorcycle
+                ? [{ x: 0, y: 0.72, z: -0.86 }]
+                : [{ x: -0.67, y: 0.90, z: -2.14 }, { x: 0.67, y: 0.90, z: -2.14 }];
+            const taillightPoints = isMotorcycle
+                ? [{ x: 0, y: 0.68, z: 0.86 }]
+                : [{ x: -0.66, y: 1.07, z: 2.24 }, { x: 0.66, y: 1.07, z: 2.24 }];
+
+            const headlightFlares = [];
+            const taillightFlares = [];
+            const taillightGlowMeshes = [];
+            headlightPoints.forEach(pt => {
+                const flare = new THREE.Mesh(headFlareGeo, headFlareMat);
+                flare.position.set(pt.x, pt.y, pt.z);
+                bodyContent.add(flare);
+                headlightFlares.push(flare);
+            });
+            taillightPoints.forEach(pt => {
+                const tailGlow = new THREE.Mesh(tailFlareGeo, tailFlareMat);
+                tailGlow.position.set(pt.x, pt.y, pt.z);
+                bodyContent.add(tailGlow);
+                taillightFlares.push(tailGlow);
+                taillightGlowMeshes.push(tailGlow);
+
+                const tailHalo = new THREE.Mesh(tailHaloGeo, tailHaloMat);
+                tailHalo.position.set(pt.x, pt.y, pt.z + 0.03);
+                bodyContent.add(tailHalo);
+                taillightGlowMeshes.push(tailHalo);
+            });
+
             bodyVisual.add(bodyContent);
             if (leanPivot) {
                 bodyVisual.position.y = physics.cgHeight;
@@ -341,6 +395,11 @@
             }
             carGroup.userData.leanPivot = leanPivot;
             carGroup.userData.bodyVisual = bodyVisual;
+            carGroup.userData.headlightFlares = headlightFlares;
+            carGroup.userData.taillightFlares = taillightFlares;
+            carGroup.userData.taillightGlowMat = tailFlareMat;
+            carGroup.userData.taillightHaloMat = tailHaloMat;
+            carGroup.userData.taillightGlowMeshes = taillightGlowMeshes;
             carGroup.userData.wheelPivots = playerWheelPivots;
             carGroup.rotation.order = 'YXZ';
             playerCar = carGroup;

@@ -1,5 +1,21 @@
         function onKeyDown(e) {
-            if (e.target && e.target.tagName === 'INPUT') return;
+            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.isContentEditable)) {
+                if (e.key === 'Escape' && e.target.closest && e.target.closest('#music-drawer')) {
+                    e.target.blur();
+                    if (window.gameMusicPlayer && typeof window.gameMusicPlayer.closeDrawer === 'function') {
+                        window.gameMusicPlayer.closeDrawer();
+                    }
+                }
+                return;
+            }
+            const musicDrawer = document.getElementById('music-drawer');
+            if (e.key === 'Escape' && !e.repeat && musicDrawer && !musicDrawer.hidden) {
+                e.preventDefault();
+                if (window.gameMusicPlayer && typeof window.gameMusicPlayer.closeDrawer === 'function') {
+                    window.gameMusicPlayer.closeDrawer();
+                }
+                return;
+            }
             if (isVehicleSelectionOpen && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
                 updateVehicleSelection(selectedVehicleType === 'car' ? 'motorcycle' : 'car');
                 e.preventDefault();
@@ -38,7 +54,7 @@
         }
 
         function onKeyUp(e) {
-            if (e.target && e.target.tagName === 'INPUT') return;
+            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.isContentEditable)) return;
             if (e.key === 'w' || e.key === 'ArrowUp') keys.forward = false;
             if (e.key === 's' || e.key === 'ArrowDown') keys.backward = false;
             if (e.key === 'a' || e.key === 'ArrowLeft') keys.left = false;
@@ -57,6 +73,9 @@
             previewCamera.updateProjectionMatrix();
             if (isVehicleSelectionOpen) updatePreviewCameraFraming(selectedVehicleType);
             renderer.setSize(window.innerWidth, window.innerHeight);
+            if (typeof resizeHighSpeedPostProcess === 'function') {
+                resizeHighSpeedPostProcess(window.innerWidth, window.innerHeight);
+            }
         }
 
         function setupCameraControls(canvas) {

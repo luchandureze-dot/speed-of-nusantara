@@ -51,6 +51,8 @@
                 policeBustedTimer = 5;
                 policeThreatLevel = 0;
                 policeToastTimer = 0;
+                policeEscalationElapsed = 0;
+                policeRamPenaltyCooldown = 0;
                 damageAccelHits = 0;
                 damageTopSpeedHits = 0;
                 damageHandlingHits = 0;

@@ -2,8 +2,8 @@
         function init() {
             // 1. Scene & Renderer
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x0a0a1a); // Nuansa malam senja kota
-            scene.fog = new THREE.FogExp2(0x0a0a1a, 0.0022);
+            scene.background = new THREE.Color(0x020308); // Malam gelap pekat
+            scene.fog = new THREE.Fog(0x020308, 250, 1100);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -12,7 +12,7 @@
             setupCameraControls(renderer.domElement);
 
             // 2. Camera
-            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2500);
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1400);
             previewScene = new THREE.Scene();
             previewScene.background = new THREE.Color(0x11151d);
             previewCamera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -26,18 +26,15 @@
             previewFillLight.position.set(4, 2, -4);
             previewScene.add(previewFillLight);
 
-            // 3. Lighting
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            // 3. Lighting (Malam Gelap: hanya tersinari lampu kendaraan, lampu kota PJU, dan cahaya gedung)
+            const ambientLight = new THREE.AmbientLight(0x0b1224, 0.045);
             scene.add(ambientLight);
-
-            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            dirLight.position.set(20, 40, 20);
-            dirLight.castShadow = true;
-            scene.add(dirLight);
 
             // 4. Buat Dunia Tol
             const roadTexturesReady = createEnvironment();
             initSkidmarksSystem();
+            initDynamicNightLighting();
+            initHighSpeedPostProcess();
 
             // 5. Event Listeners
             window.addEventListener('resize', onWindowResize);
@@ -132,6 +129,378 @@
             loadStartupAssets(roadTexturesReady);
             setupPreviewControls(renderer.domElement);
             setupTouchControls();
+        }
+
+        const _tmpLightWorldPos = new THREE.Vector3();
+        const _tmpTailWorldPos = new THREE.Vector3();
+        const _tmpCamDir = new THREE.Vector3();
+        let currentCameraFov = 60;
+        let currentTunnelEffect = 0;
+        let highSpeedPost = null;
+
+        function initHighSpeedPostProcess() {
+            if (!renderer || highSpeedPost) return;
+            const width = Math.max(1, window.innerWidth);
+            const height = Math.max(1, window.innerHeight);
+            const pixelRatio = renderer.getPixelRatio ? renderer.getPixelRatio() : 1;
+            const renderTarget = new THREE.WebGLRenderTarget(
+                Math.floor(width * pixelRatio),
+                Math.floor(height * pixelRatio),
+                {
+                    minFilter: THREE.LinearFilter,
+                    magFilter: THREE.LinearFilter,
+                    format: THREE.RGBAFormat
+                }
+            );
+            const postScene = new THREE.Scene();
+            const postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+            const postMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    tDiffuse: { value: renderTarget.texture },
+                    uBlurAmount: { value: 0 },
+                    uTunnelAmount: { value: 0 },
+                    uAspect: { value: width / height },
+                    uCenter: { value: new THREE.Vector2(0.5, 0.52) }
+                },
+                vertexShader: `
+                    varying vec2 vUv;
+                    void main() {
+                        vUv = uv;
+                        gl_Position = vec4(position.xy, 0.0, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform sampler2D tDiffuse;
+                    uniform float uBlurAmount;
+                    uniform float uTunnelAmount;
+                    uniform float uAspect;
+                    uniform vec2 uCenter;
+                    varying vec2 vUv;
+
+                    void main() {
+                        vec2 dir = vUv - uCenter;
+                        vec2 aspectDir = vec2(dir.x * uAspect, dir.y);
+                        float dist = length(aspectDir);
+
+                        // Zona tengah tetap tajam agar jalur lalu lintas di depan terlihat jelas
+                        float edgeMask = smoothstep(0.14, 0.70, dist);
+                        float blurStrength = uBlurAmount * edgeMask;
+
+                        vec3 col = vec3(0.0);
+                        if (blurStrength > 0.0005) {
+                            vec2 stepUv = dir * (blurStrength * 0.115);
+                            float totalWeight = 0.0;
+                            for (int i = 0; i < 10; i++) {
+                                float t = float(i) / 9.0;
+                                float w = 1.0 - t * 0.52;
+                                vec2 sampleUv = clamp(vUv - stepUv * t, vec2(0.001), vec2(0.999));
+                                col += texture2D(tDiffuse, sampleUv).rgb * w;
+                                totalWeight += w;
+                            }
+                            col /= totalWeight;
+
+                            // Fringe kromatik radial halus di tepi luar saat kecepatan tinggi
+                            float chroma = blurStrength * 0.010;
+                            vec2 chromaOffset = dir * chroma;
+                            float rSample = texture2D(tDiffuse, clamp(vUv - chromaOffset, vec2(0.001), vec2(0.999))).r;
+                            float bSample = texture2D(tDiffuse, clamp(vUv + chromaOffset, vec2(0.001), vec2(0.999))).b;
+                            col.r = mix(col.r, rSample, 0.58);
+                            col.b = mix(col.b, bSample, 0.58);
+                        } else {
+                            col = texture2D(tDiffuse, vUv).rgb;
+                        }
+
+                        // Vignette tunnel vision yang menutup tepi perifer saat ngebut
+                        float tunnelMask = smoothstep(0.24, 0.88, dist);
+                        float vignette = 1.0 - tunnelMask * uTunnelAmount * 0.68;
+                        col *= clamp(vignette, 0.22, 1.0);
+
+                        gl_FragColor = vec4(col, 1.0);
+                    }
+                `,
+                depthTest: false,
+                depthWrite: false
+            });
+            const postQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMaterial);
+            postQuad.frustumCulled = false;
+            postScene.add(postQuad);
+
+            highSpeedPost = {
+                renderTarget,
+                postScene,
+                postCamera,
+                postMaterial
+            };
+        }
+
+        function resizeHighSpeedPostProcess(width, height) {
+            if (!highSpeedPost || !renderer) return;
+            const w = Math.max(1, width);
+            const h = Math.max(1, height);
+            const pr = renderer.getPixelRatio ? renderer.getPixelRatio() : 1;
+            highSpeedPost.renderTarget.setSize(Math.floor(w * pr), Math.floor(h * pr));
+            highSpeedPost.postMaterial.uniforms.uAspect.value = w / h;
+        }
+
+        function initDynamicNightLighting() {
+            if (nightLightingPool.initialized) return;
+            nightLightingPool.initialized = true;
+
+            for (let i = 0; i < 2; i++) {
+                const spot = new THREE.SpotLight(0xfff4de, 0, 115, 0.42, 0.85, 1.65);
+                spot.position.set(0, -100, 0);
+                spot.target.position.set(0, -100, -10);
+                if (i === 0) {
+                    spot.castShadow = true;
+                    spot.shadow.mapSize.width = 512;
+                    spot.shadow.mapSize.height = 512;
+                    spot.shadow.camera.near = 0.9;
+                    spot.shadow.camera.far = 115;
+                    spot.shadow.bias = -0.0008;
+                }
+                scene.add(spot);
+                scene.add(spot.target);
+                nightLightingPool.playerHeadlights.push(spot);
+            }
+
+            const playerTail = new THREE.PointLight(0xff2016, 0, 9, 2.0);
+            playerTail.position.set(0, -100, 0);
+            scene.add(playerTail);
+            nightLightingPool.playerTaillight = playerTail;
+
+            for (let i = 0; i < 6; i++) {
+                const npcSpot = new THREE.SpotLight(0xfff1d0, 0, 110, 0.44, 0.82, 1.55);
+                npcSpot.position.set(0, -100, 0);
+                npcSpot.target.position.set(0, -100, -10);
+                scene.add(npcSpot);
+                scene.add(npcSpot.target);
+                nightLightingPool.npcHeadlights.push(npcSpot);
+            }
+
+            for (let i = 0; i < 4; i++) {
+                const pjuLight = new THREE.PointLight(0xffb85c, 0, 54, 1.65);
+                pjuLight.position.set(0, -100, 0);
+                scene.add(pjuLight);
+                nightLightingPool.streetLights.push(pjuLight);
+            }
+        }
+
+        function resetDynamicNightLighting() {
+            nightLightingPool.playerHeadlights.forEach(light => {
+                light.intensity = 0;
+                light.position.set(0, -100, 0);
+            });
+            if (nightLightingPool.playerTaillight) {
+                nightLightingPool.playerTaillight.intensity = 0;
+                nightLightingPool.playerTaillight.position.set(0, -100, 0);
+            }
+            nightLightingPool.npcHeadlights.forEach(light => {
+                light.intensity = 0;
+                light.position.set(0, -100, 0);
+            });
+            nightLightingPool.streetLights.forEach(light => {
+                light.intensity = 0;
+                light.position.set(0, -100, 0);
+            });
+        }
+
+        function updateDynamicNightLighting(isPlayerBraking = false) {
+            if (!nightLightingPool.initialized) return;
+
+            const refX = hasStarted ? playerX : camera.position.x;
+            const refZ = hasStarted ? playerZ : camera.position.z;
+
+            // 1. Lampu depan & belakang kendaraan pemain
+            if (hasStarted && playerCar) {
+                const isMoto = selectedVehicleType === 'motorcycle';
+                const fwdX = -Math.sin(playerYaw);
+                const fwdZ = -Math.cos(playerYaw);
+                const rightX = Math.cos(playerYaw);
+                const rightZ = -Math.sin(playerYaw);
+                const slopeOffset = Math.sin(roadPitchAngle) * 38;
+                const targetDist = 38;
+
+                playerCar.updateMatrixWorld(true);
+                const headFlares = playerCar.userData.headlightFlares || [];
+                const tailFlares = playerCar.userData.taillightFlares || [];
+
+                if (isMoto) {
+                    const mainSpot = nightLightingPool.playerHeadlights[0];
+                    const fillSpot = nightLightingPool.playerHeadlights[1];
+                    if (headFlares[0]) {
+                        headFlares[0].getWorldPosition(_tmpLightWorldPos);
+                    } else {
+                        _tmpLightWorldPos.set(playerX + fwdX * 0.84, playerY + 0.78, playerZ + fwdZ * 0.84);
+                    }
+                    mainSpot.position.copy(_tmpLightWorldPos);
+                    mainSpot.target.position.set(
+                        playerX + fwdX * targetDist,
+                        playerY - 0.35 + slopeOffset,
+                        playerZ + fwdZ * targetDist
+                    );
+                    mainSpot.angle = 0.40;
+                    mainSpot.intensity = 4.2;
+
+                    fillSpot.position.set(_tmpLightWorldPos.x, _tmpLightWorldPos.y + 0.05, _tmpLightWorldPos.z);
+                    fillSpot.target.position.set(
+                        playerX + fwdX * 24,
+                        playerY - 0.45 + Math.sin(roadPitchAngle) * 24,
+                        playerZ + fwdZ * 24
+                    );
+                    fillSpot.angle = 0.58;
+                    fillSpot.intensity = 1.7;
+                } else {
+                    const sideOffsets = [-0.67, 0.67];
+                    for (let i = 0; i < 2; i++) {
+                        const spot = nightLightingPool.playerHeadlights[i];
+                        const sx = sideOffsets[i];
+                        if (headFlares[i]) {
+                            headFlares[i].getWorldPosition(_tmpLightWorldPos);
+                            spot.position.copy(_tmpLightWorldPos);
+                        } else {
+                            spot.position.set(
+                                playerX + fwdX * 1.91 + rightX * sx,
+                                playerY + 0.90,
+                                playerZ + fwdZ * 1.91 + rightZ * sx
+                            );
+                        }
+                        spot.target.position.set(
+                            playerX + fwdX * targetDist + rightX * (sx * 0.85),
+                            playerY - 0.35 + slopeOffset,
+                            playerZ + fwdZ * targetDist + rightZ * (sx * 0.85)
+                        );
+                        spot.angle = 0.42;
+                        spot.intensity = 3.5;
+                    }
+                }
+
+                const tailLight = nightLightingPool.playerTaillight;
+                if (tailLight) {
+                    if (tailFlares.length > 0) {
+                        _tmpTailWorldPos.set(0, 0, 0);
+                        for (let f = 0; f < tailFlares.length; f++) {
+                            tailFlares[f].getWorldPosition(_tmpLightWorldPos);
+                            _tmpTailWorldPos.add(_tmpLightWorldPos);
+                        }
+                        _tmpTailWorldPos.multiplyScalar(1 / tailFlares.length);
+                        tailLight.position.set(
+                            _tmpTailWorldPos.x - fwdX * 0.18,
+                            _tmpTailWorldPos.y,
+                            _tmpTailWorldPos.z - fwdZ * 0.18
+                        );
+                    } else {
+                        const rearOffset = isMoto ? -1.05 : -2.65;
+                        tailLight.position.set(
+                            playerX + fwdX * rearOffset,
+                            playerY + (isMoto ? 0.68 : 1.07),
+                            playerZ + fwdZ * rearOffset
+                        );
+                    }
+                    tailLight.intensity = isPlayerBraking ? 1.35 : 0.45;
+                }
+                if (playerCar.userData.taillightGlowMat) {
+                    playerCar.userData.taillightGlowMat.opacity = isPlayerBraking ? 0.85 : 0.58;
+                }
+                if (playerCar.userData.taillightHaloMat) {
+                    playerCar.userData.taillightHaloMat.opacity = isPlayerBraking ? 0.45 : 0.20;
+                }
+                if (playerCar.userData.taillightGlowMeshes) {
+                    const tailScale = isPlayerBraking ? 1.18 : 1.0;
+                    playerCar.userData.taillightGlowMeshes.forEach(mesh => {
+                        mesh.scale.setScalar(tailScale);
+                    });
+                }
+            } else {
+                nightLightingPool.playerHeadlights.forEach(spot => {
+                    spot.intensity = 0;
+                });
+                if (nightLightingPool.playerTaillight) {
+                    nightLightingPool.playerTaillight.intensity = 0;
+                }
+            }
+
+            // 2. Pool Lampu Kota / PJU Jalan Tol (4 gerbang PJU di arah pandang kamera + smoothstep fade agar masuk dari 0% tanpa pop)
+            _tmpCamDir.set(0, 0, -1).applyQuaternion(camera.quaternion);
+            const camLenXZ = Math.hypot(_tmpCamDir.x, _tmpCamDir.z) || 1;
+            const camFwdX = _tmpCamDir.x / camLenXZ;
+            const camFwdZ = _tmpCamDir.z / camLenXZ;
+            if (streetLightStations.length > 0) {
+                const lookX = hasStarted ? (refX + camFwdX * 32) : refX;
+                const lookZ = hasStarted ? (refZ + camFwdZ * 32) : refZ;
+                const topStations = [];
+                for (let i = 0; i < streetLightStations.length; i++) {
+                    const st = streetLightStations[i];
+                    const dx = st.x - lookX;
+                    const dz = st.z - lookZ;
+                    const distSq = dx * dx + dz * dz;
+                    if (distSq > 76 * 76) continue;
+                    topStations.push({ st, distSq });
+                }
+                topStations.sort((a, b) => a.distSq - b.distSq);
+                for (let l = 0; l < nightLightingPool.streetLights.length; l++) {
+                    const light = nightLightingPool.streetLights[l];
+                    if (l < topStations.length) {
+                        const { st, distSq } = topStations[l];
+                        const dist = Math.sqrt(distSq);
+                        const tFade = 1 - THREE.MathUtils.clamp((dist - 34) / 38, 0, 1);
+                        const fade = tFade * tFade * (3 - 2 * tFade);
+                        light.position.set(st.x, st.y, st.z);
+                        light.intensity = 4.5 * fade;
+                    } else {
+                        light.intensity = 0;
+                        light.position.set(0, -100, 0);
+                    }
+                }
+            }
+
+            // 3. Pool Lampu Depan Mobil NPC (6 NPC terdekat di arah pandang kamera — depan maupun belakang — aktif sejak awal)
+            if (hasStarted && trafficCars.length > 0) {
+                const lookNpcX = refX + camFwdX * 22;
+                const lookNpcZ = refZ + camFwdZ * 22;
+                const nearestNpcs = [];
+                for (let i = 0; i < trafficCars.length; i++) {
+                    const npc = trafficCars[i];
+                    const dx = npc.position.x - refX;
+                    const dz = npc.position.z - refZ;
+                    const distSq = dx * dx + dz * dz;
+                    if (distSq > 175 * 175) continue;
+                    const ldx = npc.position.x - lookNpcX;
+                    const ldz = npc.position.z - lookNpcZ;
+                    nearestNpcs.push({ npc, distSq, sortDistSq: ldx * ldx + ldz * ldz });
+                }
+                nearestNpcs.sort((a, b) => a.sortDistSq - b.sortDistSq);
+                for (let l = 0; l < nightLightingPool.npcHeadlights.length; l++) {
+                    const spot = nightLightingPool.npcHeadlights[l];
+                    if (l < nearestNpcs.length) {
+                        const { npc, distSq } = nearestNpcs[l];
+                        const dist = Math.sqrt(distSq);
+                        const tFade = 1 - THREE.MathUtils.clamp((dist - 115) / 60, 0, 1);
+                        const fade = tFade * tFade * (3 - 2 * tFade);
+                        const npcYaw = npc.rotation.y;
+                        const fwdX = -Math.sin(npcYaw);
+                        const fwdZ = -Math.cos(npcYaw);
+                        const frontOff = (npc.userData.halfLength || 2.1) + 0.12;
+                        spot.position.set(
+                            npc.position.x + fwdX * frontOff,
+                            npc.position.y + 0.80,
+                            npc.position.z + fwdZ * frontOff
+                        );
+                        spot.target.position.set(
+                            npc.position.x + fwdX * (frontOff + 36),
+                            npc.position.y - 0.35,
+                            npc.position.z + fwdZ * (frontOff + 36)
+                        );
+                        spot.intensity = 4.8 * fade;
+                    } else {
+                        spot.intensity = 0;
+                        spot.position.set(0, -100, 0);
+                    }
+                }
+            } else {
+                nightLightingPool.npcHeadlights.forEach(spot => {
+                    spot.intensity = 0;
+                });
+            }
         }
 
         function formatLapTime(seconds) {
@@ -294,6 +663,10 @@
             document.getElementById('vehicle-selection').hidden = false;
             document.body.classList.add('vehicle-selection-open');
             updateVehicleSelection(selectedVehicleType);
+            window.__shouldStartDefaultMusic = true;
+            if (window.gameMusicPlayer && typeof window.gameMusicPlayer.playDefaultSoundtrack === 'function') {
+                window.gameMusicPlayer.playDefaultSoundtrack();
+            }
         }
 
         function updateVehicleSelection(vehicleType) {
@@ -384,7 +757,7 @@
             canvas.addEventListener('pointercancel', stopPreviewDrag);
         }
 
-        const _satCollisionResult = { hit: false, nx: 0, nz: 0, penetration: 0 };
+        const _satCollisionResult = { hit: false, nx: 0, nz: 0, penetration: 0, contactX: 0, contactZ: 0 };
         let activeScrapeIntensity = 0;
 
         function computeObbCollision2D(ax, az, aYaw, aHalfL, aHalfW, bx, bz, bYaw, bHalfL, bHalfW) {
@@ -404,6 +777,7 @@
             let minOverlap = Infinity;
             let bestNx = 0;
             let bestNz = 0;
+            let bestAxis = 0;
 
             for (let axis = 0; axis < 4; axis++) {
                 let ux, uz;
@@ -429,13 +803,104 @@
                     const sign = (dx * ux + dz * uz) >= 0 ? 1 : -1;
                     bestNx = ux * sign;
                     bestNz = uz * sign;
+                    bestAxis = axis;
                 }
+            }
+
+            // Hitung titik kontak sebenarnya lewat edge-clipping 2D (reference face vs incident face)
+            const refIsA = bestAxis < 2;
+            const refNx = refIsA ? -bestNx : bestNx;
+            const refNz = refIsA ? -bestNz : bestNz;
+            const refTx = -refNz;
+            const refTz = refNx;
+            const refCenterX = refIsA ? ax : bx;
+            const refCenterZ = refIsA ? az : bz;
+            const refHalfDist = bestAxis === 0 ? aHalfL : (bestAxis === 1 ? aHalfW : (bestAxis === 2 ? bHalfL : bHalfW));
+            const refHalfPerp = bestAxis === 0 ? aHalfW : (bestAxis === 1 ? aHalfL : (bestAxis === 2 ? bHalfW : bHalfL));
+            const refFaceX = refCenterX + refNx * refHalfDist;
+            const refFaceZ = refCenterZ + refNz * refHalfDist;
+
+            const incCenterX = refIsA ? bx : ax;
+            const incCenterZ = refIsA ? bz : az;
+            const incFwdX = refIsA ? bFwdX : aFwdX;
+            const incFwdZ = refIsA ? bFwdZ : aFwdZ;
+            const incRightX = refIsA ? bRightX : aRightX;
+            const incRightZ = refIsA ? bRightZ : aRightZ;
+            const incHalfL = refIsA ? bHalfL : aHalfL;
+            const incHalfW = refIsA ? bHalfW : aHalfW;
+
+            const dotFwd = incFwdX * refNx + incFwdZ * refNz;
+            const dotRight = incRightX * refNx + incRightZ * refNz;
+            let incFaceNx, incFaceNz, incPerpX, incPerpZ, incFaceDist, incPerpHalf;
+            if (Math.abs(dotFwd) >= Math.abs(dotRight)) {
+                const s = dotFwd <= 0 ? 1 : -1;
+                incFaceNx = incFwdX * s;
+                incFaceNz = incFwdZ * s;
+                incPerpX = incRightX;
+                incPerpZ = incRightZ;
+                incFaceDist = incHalfL;
+                incPerpHalf = incHalfW;
+            } else {
+                const s = dotRight <= 0 ? 1 : -1;
+                incFaceNx = incRightX * s;
+                incFaceNz = incRightZ * s;
+                incPerpX = incFwdX;
+                incPerpZ = incFwdZ;
+                incFaceDist = incHalfW;
+                incPerpHalf = incHalfL;
+            }
+
+            const incFaceCx = incCenterX + incFaceNx * incFaceDist;
+            const incFaceCz = incCenterZ + incFaceNz * incFaceDist;
+            const p1x = incFaceCx - incPerpX * incPerpHalf;
+            const p1z = incFaceCz - incPerpZ * incPerpHalf;
+            const p2x = incFaceCx + incPerpX * incPerpHalf;
+            const p2z = incFaceCz + incPerpZ * incPerpHalf;
+
+            const s1 = (p1x - refFaceX) * refTx + (p1z - refFaceZ) * refTz;
+            const s2 = (p2x - refFaceX) * refTx + (p2z - refFaceZ) * refTz;
+            const ds = s2 - s1;
+            let tMin = 0;
+            let tMax = 1;
+            if (Math.abs(ds) > 1e-6) {
+                const tA = (-refHalfPerp - s1) / ds;
+                const tB = (refHalfPerp - s1) / ds;
+                const lo = Math.min(tA, tB);
+                const hi = Math.max(tA, tB);
+                tMin = Math.max(0, lo);
+                tMax = Math.min(1, hi);
+            }
+
+            let contactX, contactZ;
+            if (tMin <= tMax) {
+                const c1x = p1x + (p2x - p1x) * tMin;
+                const c1z = p1z + (p2z - p1z) * tMin;
+                const c2x = p1x + (p2x - p1x) * tMax;
+                const c2z = p1z + (p2z - p1z) * tMax;
+                const d1 = (c1x - refFaceX) * refNx + (c1z - refFaceZ) * refNz;
+                const d2 = (c2x - refFaceX) * refNx + (c2z - refFaceZ) * refNz;
+                if (d1 <= 0.05 && d2 <= 0.05) {
+                    contactX = (c1x + c2x) * 0.5;
+                    contactZ = (c1z + c2z) * 0.5;
+                } else if (d1 <= d2) {
+                    contactX = c1x;
+                    contactZ = c1z;
+                } else {
+                    contactX = c2x;
+                    contactZ = c2z;
+                }
+            } else {
+                const clampedS = THREE.MathUtils.clamp((s1 + s2) * 0.5, -refHalfPerp, refHalfPerp);
+                contactX = refFaceX + refTx * clampedS;
+                contactZ = refFaceZ + refTz * clampedS;
             }
 
             _satCollisionResult.hit = true;
             _satCollisionResult.nx = bestNx;
             _satCollisionResult.nz = bestNz;
             _satCollisionResult.penetration = minOverlap;
+            _satCollisionResult.contactX = contactX;
+            _satCollisionResult.contactZ = contactZ;
             return _satCollisionResult;
         }
 
@@ -453,6 +918,7 @@
                     }
                     renderer.render(previewScene, previewCamera);
                 } else {
+                    updateDynamicNightLighting(false);
                     renderer.render(scene, camera);
                 }
                 return;
@@ -705,7 +1171,41 @@
                 }
             }
 
-            // Update Posisi Kamera
+            // Update Posisi Kamera + FOV Dinamis Agresif + Efek Tunnel Vision Kecepatan Tinggi
+            const speedMps = Math.hypot(velocityX, velocityZ);
+            const speedKmh = speedMps * 3.6;
+            const isMoto = selectedVehicleType === 'motorcycle';
+            const lowNorm = THREE.MathUtils.clamp((speedKmh - 42) / (isMoto ? 34 : 58), 0, 1);
+            const highNorm = THREE.MathUtils.clamp((speedKmh - (isMoto ? 74 : 100)) / (isMoto ? 46 : 100), 0, 1);
+            const accelSurge = THREE.MathUtils.clamp((longitudinalAcceleration - 1.2) * 0.45, 0, 4.5);
+            const targetFov = THREE.MathUtils.clamp(
+                60 + Math.pow(lowNorm, 0.85) * 16.0 + Math.pow(highNorm, 1.08) * (isMoto ? 26.0 : 32.0) + accelSurge,
+                60,
+                112
+            );
+            const fovDampRate = targetFov > currentCameraFov ? 7.2 : 5.8;
+            currentCameraFov = THREE.MathUtils.damp(currentCameraFov, targetFov, fovDampRate, dt);
+            if (Math.abs(camera.fov - currentCameraFov) > 0.02) {
+                camera.fov = currentCameraFov;
+                camera.updateProjectionMatrix();
+            }
+
+            const blurStartKmh = isMoto ? 72 : 98;
+            const blurSpanKmh = isMoto ? 48 : 102;
+            const blurSpeedNorm = THREE.MathUtils.clamp((speedKmh - blurStartKmh) / blurSpanKmh, 0, 1);
+            const accelTunnelBoost = THREE.MathUtils.clamp((longitudinalAcceleration - 2.0) * 0.025, 0, 0.10) * blurSpeedNorm;
+            const targetTunnelEffect = THREE.MathUtils.clamp(
+                Math.pow(blurSpeedNorm, 1.15) * (isMoto ? 0.90 : 1.0) + accelTunnelBoost,
+                0,
+                1
+            );
+            currentTunnelEffect = THREE.MathUtils.damp(
+                currentTunnelEffect,
+                targetTunnelEffect,
+                targetTunnelEffect > currentTunnelEffect ? 6.8 : 5.2,
+                dt
+            );
+
             const orbit = cameraOrbits[cameraMode];
             if (!isCameraDragging) {
                 orbit.yawVelocity += (-36 * orbit.yaw - 12 * orbit.yawVelocity) * dt;
@@ -720,7 +1220,9 @@
             const focusZ = playerZ;
             const neutralPitch = camPreset.neutralPitch;
             const cameraPitch = Math.max(-0.15, Math.min(1.35, neutralPitch + orbit.pitch));
-            const horizontalDistance = orbit.distance * Math.cos(cameraPitch);
+            const chaseTunnelZoom = cameraMode === 1 ? (1 - currentTunnelEffect * 0.09) : 1;
+            const effectiveOrbitDist = orbit.distance * chaseTunnelZoom;
+            const horizontalDistance = effectiveOrbitDist * Math.cos(cameraPitch);
             const isLookingBack = Boolean(keys.lookBack);
             if (cameraMode === 2 && isLookingBack) {
                 const roofHeight = selectedVehicleType === 'motorcycle' ? 1.55 : 2.05;
@@ -729,7 +1231,7 @@
                 const orbitYaw = playerYaw + (cameraMode === 1 ? (isLookingBack ? Math.PI : 0) : Math.PI) + orbit.yaw;
                 camera.position.set(
                     focusX + Math.sin(orbitYaw) * horizontalDistance,
-                    focusY + Math.sin(cameraPitch) * orbit.distance,
+                    focusY + Math.sin(cameraPitch) * effectiveOrbitDist,
                     focusZ + Math.cos(orbitYaw) * horizontalDistance
                 );
             }
@@ -791,7 +1293,7 @@
                     continue;
                 }
 
-                const sameRoadLevel = Math.abs(playerY - npc.position.y) < 2;
+                const sameRoadLevel = Math.abs(playerY - npc.position.y) < 2.2;
                 if (!sameRoadLevel) continue;
 
                 const npcHalfLength = (npcData.halfLength || 2.0) + 0.08;
@@ -813,33 +1315,42 @@
                     const nx = sat.nx; // Dari NPC ke Pemain
                     const nz = sat.nz;
                     const penetration = sat.penetration;
+                    const wasFreeBodyBefore = Boolean(npcData.freeBodyActive);
                     const hasPolicePhysBefore = Boolean(
+                        !wasFreeBodyBefore &&
                         npcData.isPolice &&
                         npcData.policeState === 'chase' &&
                         npcData.policePhysics &&
                         npcData.policePhysics.initialized
                     );
-                    const npcYaw = hasPolicePhysBefore
-                        ? npcData.policePhysics.yaw
-                        : (npc.rotation.y - (npcData.yawOffset || 0));
+                    const npcYaw = wasFreeBodyBefore
+                        ? npcData.fbYaw
+                        : hasPolicePhysBefore
+                            ? npcData.policePhysics.yaw
+                            : (npc.rotation.y - (npcData.yawOffset || 0));
                     const roadFwdX = -Math.sin(npcYaw);
                     const roadFwdZ = -Math.cos(npcYaw);
                     const roadRightX = Math.cos(npcYaw);
                     const roadRightZ = -Math.sin(npcYaw);
 
-                    const npcVelX = hasPolicePhysBefore
-                        ? npcData.policePhysics.vx
-                        : (roadFwdX * (npcData.speed || 0) + roadRightX * (npcData.lateralVelocity || 0));
-                    const npcVelZ = hasPolicePhysBefore
-                        ? npcData.policePhysics.vz
-                        : (roadFwdZ * (npcData.speed || 0) + roadRightZ * (npcData.lateralVelocity || 0));
+                    const npcVelX = wasFreeBodyBefore
+                        ? npcData.fbVx
+                        : hasPolicePhysBefore
+                            ? npcData.policePhysics.vx
+                            : (roadFwdX * (npcData.speed || 0) + roadRightX * (npcData.lateralVelocity || 0));
+                    const npcVelZ = wasFreeBodyBefore
+                        ? npcData.fbVz
+                        : hasPolicePhysBefore
+                            ? npcData.policePhysics.vz
+                            : (roadFwdZ * (npcData.speed || 0) + roadRightZ * (npcData.lateralVelocity || 0));
                     const relVx = velocityX - npcVelX;
                     const relVz = velocityZ - npcVelZ;
                     const vNormal = relVx * nx + relVz * nz;
+                    const closingSpeedPre = vNormal < 0 ? -vNormal : 0;
 
                     // Benturan keras memberi kerusakan acak pada kendaraan (bukan Game Over)
-                    if (-vNormal > 11.5) {
-                        if (applyRandomCrashDamage(-vNormal)) {
+                    if (closingSpeedPre > 11.5) {
+                        if (applyRandomCrashDamage(closingSpeedPre)) {
                             npcData.hitCooldown = Math.max(npcData.hitCooldown || 0, 0.45);
                         }
                     }
@@ -847,12 +1358,42 @@
                     if (npcData.isPolice) {
                         if (npcData.policeState !== 'chase') {
                             npcData.policeState = 'chase';
-                            syncPolicePhysicsFromNpc(npc);
+                            if (!npcData.freeBodyActive) syncPolicePhysicsFromNpc(npc);
                         }
                         npcData.chaseCalmTimer = 0;
                     }
 
+                    // Lepaskan NPC dari aspal ke mode fisika 3D bebas saat terkena gaya luar yang cukup kuat
+                    const npcMass = (npcData.isPolice && npcData.policeState === 'chase')
+                        ? vehiclePhysicsConfigs.car.mass
+                        : (npcData.mass || 1450);
+                    const invPlayerMass = 1 / playerMass;
+                    const invNpcMass = 1 / npcMass;
+                    const totalInvMass = invPlayerMass + invNpcMass;
+                    const playerShare = invPlayerMass / totalInvMass;
+                    const npcShare = invNpcMass / totalInvMass;
+
+                    const isActiveChaser = Boolean(npcData.isPolice && npcData.policeState === 'chase');
+                    const fbClosingThreshold = isActiveChaser ? 5.2 : 3.2;
+                    const fbDeltaThreshold = isActiveChaser ? 3.4 : 1.35;
+                    const estimatedNpcDeltaV = closingSpeedPre * (invNpcMass / totalInvMass);
+                    if (!npcData.freeBodyActive && (
+                        (closingSpeedPre > fbClosingThreshold && estimatedNpcDeltaV > fbDeltaThreshold) ||
+                        estimatedNpcDeltaV > 2.2
+                    )) {
+                        if (typeof enterNpcFreeBodyMode === 'function') {
+                            enterNpcFreeBodyMode(npc);
+                        }
+                    }
+
+                    const isFreeBody = Boolean(npcData.freeBodyActive);
+                    if (npcData.isPolice && policeThreatLevel >= 1 && policeThreatLevel < 3 &&
+                        policeRamPenaltyCooldown <= 0 && closingSpeedPre > 4.2) {
+                        policeEscalationElapsed += (isFreeBody || closingSpeedPre > 11.5) ? 150 : 75;
+                        policeRamPenaltyCooldown = 2.0;
+                    }
                     const hasPolicePhys = Boolean(
+                        !isFreeBody &&
                         npcData.isPolice &&
                         npcData.policeState === 'chase' &&
                         npcData.policePhysics &&
@@ -860,18 +1401,21 @@
                     );
 
                     // 1. Pisahkan posisi secara presisi sesuai rasio massa agar bodi TIDAK clipping
-                    const npcMass = hasPolicePhys ? vehiclePhysicsConfigs.car.mass : (npcData.mass || 1450);
-                    const invPlayerMass = 1 / playerMass;
-                    const invNpcMass = 1 / npcMass;
-                    const totalInvMass = invPlayerMass + invNpcMass;
-                    const playerShare = invPlayerMass / totalInvMass;
-                    const npcShare = invNpcMass / totalInvMass;
-
                     const separation = penetration + 0.008;
                     const npcMoveX = -nx * separation * npcShare;
                     const npcMoveZ = -nz * separation * npcShare;
 
-                    if (hasPolicePhys) {
+                    if (isFreeBody) {
+                        npcData.fbX += npcMoveX;
+                        npcData.fbZ += npcMoveZ;
+                        npcData.fbRestTimer = 0;
+                        npcData.recoveringUpright = false;
+                        if (typeof syncNpcMeshFromFreeBody === 'function') {
+                            syncNpcMeshFromFreeBody(npc, npcData);
+                        }
+                        playerX += nx * separation * playerShare;
+                        playerZ += nz * separation * playerShare;
+                    } else if (hasPolicePhys) {
                         const pp = npcData.policePhysics;
                         pp.x += npcMoveX;
                         pp.z += npcMoveZ;
@@ -906,23 +1450,116 @@
                         playerZ += nz * separation * playerShare + roadRightZ * (-leftoverLat);
                     }
 
-                    // 2. Resolusi kecepatan normal (inelastis) + efek kedorong & hilang traksi ban NPC
-                    if (vNormal < 0) {
-                        const closingSpeed = -vNormal;
-                        const restitution = 0.06;
-                        const j = (1 + restitution) * closingSpeed / totalInvMass;
+                    // 2. Solver Impuls Rigid-Body Sejati (massa riil, titik kontak SAT, & momen inersia)
+                    const npcYawVelCurr = isFreeBody
+                        ? (npcData.fbYawVel || 0)
+                        : hasPolicePhys
+                            ? (npcData.policePhysics.yawRate || 0)
+                            : (npcData.yawVelocity || 0);
+                    const rAx = sat.contactX - playerBoxCenterX;
+                    const rAz = sat.contactZ - playerBoxCenterZ;
+                    const rBx = sat.contactX - npc.position.x;
+                    const rBz = sat.contactZ - npc.position.z;
 
-                        const playerDeltaV = j * invPlayerMass;
-                        velocityX += nx * playerDeltaV;
-                        velocityZ += nz * playerDeltaV;
+                    const vContactAX = velocityX + yawRate * rAz;
+                    const vContactAZ = velocityZ - yawRate * rAx;
+                    const vContactBX = npcVelX + npcYawVelCurr * rBz;
+                    const vContactBZ = npcVelZ - npcYawVelCurr * rBx;
+                    const vRelContactX = vContactAX - vContactBX;
+                    const vRelContactZ = vContactAZ - vContactBZ;
+                    const vContactNormal = vRelContactX * nx + vRelContactZ * nz;
 
-                        const npcDeltaV = j * invNpcMass;
-                        const npcPushX = -nx * npcDeltaV;
-                        const npcPushZ = -nz * npcDeltaV;
+                    if (vContactNormal < 0 || vNormal < 0) {
+                        const closingSpeed = Math.max(0, vContactNormal < 0 ? -vContactNormal : -vNormal);
+                        const playerFullL = playerHalfLength * 2;
+                        const playerFullW = playerHalfWidth * 2;
+                        const playerYawInertia = Math.max(120, playerMass * (playerFullL * playerFullL + playerFullW * playerFullW) / 12);
+
+                        const npcFullL = (npcData.halfLength || 2.0) * 2;
+                        const npcFullW = (npcData.halfWidth || 0.9) * 2;
+                        const npcFullH = (npcData.halfHeight || 0.7) * 2;
+                        const npcCgH = npcData.cgHeight || (npcData.localComY || 0.65);
+                        const npcInertiaYaw = npcData.inertiaYaw || Math.max(450, npcMass * (npcFullL * npcFullL + npcFullW * npcFullW) / 12);
+                        const npcInertiaPitch = npcData.inertiaPitch || Math.max(450, npcMass * (npcFullL * npcFullL + npcFullH * npcFullH) / 12);
+                        const npcInertiaRoll = npcData.inertiaRoll || Math.max(250, npcMass * (npcFullW * npcFullW + npcFullH * npcFullH) / 12);
+
+                        const rACrossN = rAz * nx - rAx * nz;
+                        const rBCrossN = rBz * nx - rBx * nz;
+                        const denomN = invPlayerMass + invNpcMass +
+                            (rACrossN * rACrossN) / playerYawInertia +
+                            (rBCrossN * rBCrossN) / npcInertiaYaw;
+                        const restitution = closingSpeed < 3.0 ? 0.08 : 0.16;
+                        const jn = (1 + restitution) * closingSpeed / denomN;
+
+                        const tx = -nz;
+                        const tz = nx;
+                        const vTangent = vRelContactX * tx + vRelContactZ * tz;
+                        const rACrossT = rAz * tx - rAx * tz;
+                        const rBCrossT = rBz * tx - rBx * tz;
+                        const denomT = invPlayerMass + invNpcMass +
+                            (rACrossT * rACrossT) / playerYawInertia +
+                            (rBCrossT * rBCrossT) / npcInertiaYaw;
+                        const muContact = 0.26;
+                        const jt = THREE.MathUtils.clamp(-vTangent / denomT, -muContact * jn, muContact * jn);
+
+                        const jxPlayer = jn * nx + jt * tx;
+                        const jzPlayer = jn * nz + jt * tz;
+                        const jxNpc = -jxPlayer;
+                        const jzNpc = -jzPlayer;
+
+                        velocityX += jxPlayer * invPlayerMass;
+                        velocityZ += jzPlayer * invPlayerMass;
+                        const playerTorqueImpulse = (rAz * jxPlayer - rAx * jzPlayer) / playerYawInertia;
+                        yawRate = THREE.MathUtils.clamp(yawRate + playerTorqueImpulse * 0.45, -2.6, 2.6);
+
+                        const npcPushX = jxNpc * invNpcMass;
+                        const npcPushZ = jzNpc * invNpcMass;
                         const pushFwd = npcPushX * roadFwdX + npcPushZ * roadFwdZ;
                         const pushLat = npcPushX * roadRightX + npcPushZ * roadRightZ;
+                        const jFwd = jxNpc * roadFwdX + jzNpc * roadFwdZ;
+                        const jLat = jxNpc * roadRightX + jzNpc * roadRightZ;
+                        const npcDeltaYaw = (rBz * jxNpc - rBx * jzNpc) / npcInertiaYaw;
 
-                        if (hasPolicePhys) {
+                        if (isFreeBody) {
+                            npcData.fbVx += npcPushX;
+                            npcData.fbVz += npcPushZ;
+                            npcData.fbRestTimer = 0;
+                            npcData.recoveringUpright = false;
+                            npcData.fbYawVel = THREE.MathUtils.clamp((npcData.fbYawVel || 0) + npcDeltaYaw, -8.5, 8.5);
+
+                            // Reaksi suspensi pitch & roll murni dari tinggi pusat massa dan impuls horizontal
+                            const pitchLever = Math.min(0.24, Math.max(0.08, npcCgH * 0.25));
+                            const rollLever = Math.max(0.18, npcCgH - 0.34);
+                            npcData.fbPitchVel = THREE.MathUtils.clamp(
+                                (npcData.fbPitchVel || 0) + (jFwd * pitchLever) / npcInertiaPitch,
+                                -3.8,
+                                3.8
+                            );
+                            npcData.fbRollVel = THREE.MathUtils.clamp(
+                                (npcData.fbRollVel || 0) + (jLat * rollLever) / npcInertiaRoll,
+                                -6.5,
+                                6.5
+                            );
+
+                            // Jangan angkat kendaraan pada tabrakan datar; terangkat hanya jika terguling (rollover) atau benturan ekstrim
+                            const latDeltaV = Math.abs(pushLat);
+                            const rolloverDeltaV = 9.81 * ((npcData.halfWidth || 0.9) / Math.max(0.35, npcCgH)) * 1.15;
+                            const isExtremeWreck = closingSpeed > 26 && (playerMass / npcMass) >= 0.85;
+                            if ((npcData.fbLaunchCooldown || 0) <= 0 && (latDeltaV > rolloverDeltaV || isExtremeWreck)) {
+                                const rolloverLift = latDeltaV > rolloverDeltaV
+                                    ? Math.min(4.6, (latDeltaV - rolloverDeltaV) * 0.42)
+                                    : 0;
+                                const wreckLift = isExtremeWreck
+                                    ? Math.min(5.2, (closingSpeed - 26) * 0.22 * Math.min(1.3, playerMass / npcMass))
+                                    : 0;
+                                const verticalPop = Math.max(rolloverLift, wreckLift);
+                                if (verticalPop > 0.6) {
+                                    npcData.fbVy = Math.max(npcData.fbVy || 0, verticalPop);
+                                    npcData.fbGrounded = false;
+                                    npcData.fbLaunchCooldown = 0.28;
+                                }
+                            }
+                        } else if (hasPolicePhys) {
                             const pp = npcData.policePhysics;
                             pp.vx += npcPushX;
                             pp.vz += npcPushZ;
@@ -935,52 +1572,37 @@
                                 pp.vz -= ppFwdZ * ex;
                             }
                             npcData.speed = pp.vx * ppFwdX + pp.vz * ppFwdZ;
+                            const yawScale = closingSpeed < 3.5 ? 0.45 : 0.85;
+                            pp.yawRate = THREE.MathUtils.clamp(pp.yawRate + npcDeltaYaw * yawScale, -2.2, 2.2);
                         } else {
                             const isChasingUnit = npcData.isPolice && npcData.policeState === 'chase';
                             const npcMaxSpd = isChasingUnit ? POLICE_MAX_CHASE_SPEED_MPS : 42;
                             const npcMinSpd = 0;
                             npcData.speed = THREE.MathUtils.clamp(npcData.speed + pushFwd, npcMinSpd, npcMaxSpd);
-                            npcData.lateralVelocity = THREE.MathUtils.clamp(npcData.lateralVelocity + pushLat, -14, 14);
+                            npcData.lateralVelocity = THREE.MathUtils.clamp(npcData.lateralVelocity + pushLat, -18, 18);
+                            npcData.yawVelocity = THREE.MathUtils.clamp((npcData.yawVelocity || 0) + npcDeltaYaw, -3.5, 3.5);
                         }
                         npcData.pushedTimer = Math.max(npcData.pushedTimer || 0, 1.1);
                         npcData.controlLossTimer = Math.max(
                             npcData.controlLossTimer || 0,
-                            Math.min(1.5, 0.35 + closingSpeed * 0.09)
+                            Math.min(1.5, 0.25 + Math.abs(npcDeltaYaw) * 0.35 + closingSpeed * 0.05)
                         );
-                        if (closingSpeed > 1.5) {
+                        if (closingSpeed > 1.5 && (!npcData.isPolice || isFreeBody || closingSpeed > 9.5)) {
                             npcData.skidIntensity = Math.max(
                                 npcData.skidIntensity || 0,
                                 THREE.MathUtils.clamp(closingSpeed / 8, 0.25, 1)
                             );
                         }
 
-                        // Torsi yaw realistis berdasarkan titik benturan depan/belakang (efek PIT maneuver)
-                        const relNpcX = playerBoxCenterX - npc.position.x;
-                        const relNpcZ = playerBoxCenterZ - npc.position.z;
-                        const contactFwdOffset = THREE.MathUtils.clamp(
-                            relNpcX * roadFwdX + relNpcZ * roadFwdZ,
-                            -npcHalfLength,
-                            npcHalfLength
-                        );
-                        const contactLatOffset = THREE.MathUtils.clamp(
-                            relNpcX * roadRightX + relNpcZ * roadRightZ,
-                            -npcHalfWidth,
-                            npcHalfWidth
-                        );
-                        const pitTorque = contactFwdOffset * (-pushLat) + contactLatOffset * pushFwd;
-                        if (hasPolicePhys) {
-                            npcData.policePhysics.yawRate += THREE.MathUtils.clamp(pitTorque * 0.32, -2.4, 2.4);
-                        } else {
-                            npcData.yawVelocity += THREE.MathUtils.clamp(pitTorque * 0.32, -2.4, 2.4);
-                        }
-
                         const latPushFactor = Math.min(1, closingSpeed / 12);
                         if (closingSpeed > 1.8) {
                             const sideSign = Math.sign(pushLat) || Math.sign(nx * roadRightX + nz * roadRightZ) || 1;
-                            if (hasPolicePhys) {
-                                npcData.policePhysics.bodyRollVelocity += sideSign * latPushFactor * 1.15;
-                            } else {
-                                npcData.rollVelocity += sideSign * latPushFactor * 1.15;
+                            if (!isFreeBody) {
+                                if (hasPolicePhys) {
+                                    npcData.policePhysics.bodyRollVelocity += sideSign * latPushFactor * 1.15;
+                                } else {
+                                    npcData.rollVelocity += sideSign * latPushFactor * 1.15;
+                                }
                             }
                             bodyRollVelocity += -sideSign * latPushFactor * 0.7;
                         }
@@ -1009,7 +1631,12 @@
                         const npcGrindPush = grindFriction * (playerMass / npcMass) * 0.55;
                         const npcGrindWorldX = tangentX * grindSign * npcGrindPush;
                         const npcGrindWorldZ = tangentZ * grindSign * npcGrindPush;
-                        if (hasPolicePhys) {
+                        if (isFreeBody) {
+                            npcData.fbVx += npcGrindWorldX;
+                            npcData.fbVz += npcGrindWorldZ;
+                            npcData.fbRestTimer = 0;
+                            npcData.recoveringUpright = false;
+                        } else if (hasPolicePhys) {
                             const pp = npcData.policePhysics;
                             pp.vx += npcGrindWorldX;
                             pp.vz += npcGrindWorldZ;
@@ -1020,14 +1647,16 @@
                             const npcMaxSpd = isChasingUnit ? POLICE_MAX_CHASE_SPEED_MPS : 42;
                             const npcMinSpd = 0;
                             npcData.speed = THREE.MathUtils.clamp(npcData.speed + npcGrindFwd, npcMinSpd, npcMaxSpd);
-                            npcData.lateralVelocity = THREE.MathUtils.clamp(npcData.lateralVelocity + npcGrindLat, -14, 14);
+                            npcData.lateralVelocity = THREE.MathUtils.clamp(npcData.lateralVelocity + npcGrindLat, -18, 18);
                         }
                         npcData.pushedTimer = Math.max(npcData.pushedTimer || 0, 0.7);
                         npcData.controlLossTimer = Math.max(npcData.controlLossTimer || 0, 0.35);
-                        npcData.skidIntensity = Math.max(
-                            npcData.skidIntensity || 0,
-                            THREE.MathUtils.clamp(absRelTangent / 12, 0.2, 0.85)
-                        );
+                        if (!npcData.isPolice || isFreeBody || absRelTangent > 10.5) {
+                            npcData.skidIntensity = Math.max(
+                                npcData.skidIntensity || 0,
+                                THREE.MathUtils.clamp(absRelTangent / 12, 0.2, 0.85)
+                            );
+                        }
 
                         // Sedikit tarikan setir ke arah gesekan bodi saat grinding
                         const sideDot = nx * playerRightX + nz * playerRightZ;
@@ -1073,8 +1702,20 @@
             enforcePlayerConcreteWallCollision(dt, false);
             playerCar.position.x = playerX;
             playerCar.position.z = playerZ;
+            updateDynamicNightLighting(brakingNow);
 
-            renderer.render(scene, camera);
+            if (highSpeedPost && currentTunnelEffect > 0.003) {
+                highSpeedPost.postMaterial.uniforms.uBlurAmount.value = currentTunnelEffect * 0.96;
+                highSpeedPost.postMaterial.uniforms.uTunnelAmount.value = currentTunnelEffect * 0.88;
+                highSpeedPost.postMaterial.uniforms.uCenter.value.set(0.5, cameraMode === 2 ? 0.50 : 0.53);
+                renderer.setRenderTarget(highSpeedPost.renderTarget);
+                renderer.render(scene, camera);
+                renderer.setRenderTarget(null);
+                renderer.render(highSpeedPost.postScene, highSpeedPost.postCamera);
+            } else {
+                renderer.setRenderTarget(null);
+                renderer.render(scene, camera);
+            }
         }
 
         function enforcePlayerConcreteWallCollision(dt, applyDynamics) {
@@ -1240,9 +1881,10 @@
                 isCameraDragging = false;
                 resetInputs();
                 updateGameAudio(0, 1000, 6000, 0, false, false, selectedVehicleType, false);
-                stopPoliceVoice();
+                window.gameMusicPlayer?.pauseForGamePause?.();
             } else {
                 clock.getDelta();
+                window.gameMusicPlayer?.resumeFromGamePause?.();
             }
         }
 
@@ -1258,7 +1900,7 @@
             activeScrapeIntensity = 0;
             cameraShakeIntensity = isBusted ? 0.15 : 0.45;
             updateGameAudio(0, 1000, 6000, 0, false, false, selectedVehicleType, false);
-            stopPoliceVoice();
+            window.gameMusicPlayer?.clearGamePauseFlag?.();
             if (!isBusted) {
                 playCrashSound();
             }
@@ -1313,11 +1955,14 @@
             if (pauseMenu) pauseMenu.hidden = true;
             const pauseButton = document.getElementById('pause-game');
             if (pauseButton) pauseButton.setAttribute('aria-pressed', 'false');
+            window.gameMusicPlayer?.resumeFromGamePause?.();
             const phys = vehiclePhysicsConfigs[selectedVehicleType];
             currentGear = phys.isCvt ? 2 : 3;
             policeBustedTimer = 5;
             policeThreatLevel = 0;
             policeToastTimer = 0;
+            policeEscalationElapsed = 0;
+            policeRamPenaltyCooldown = 0;
             damageAccelHits = 0;
             damageTopSpeedHits = 0;
             damageHandlingHits = 0;
@@ -1342,10 +1987,15 @@
             score = 0;
             lastPlayerSegmentIndex = -1;
             cameraShakeIntensity = 0;
+            currentCameraFov = 60;
+            currentTunnelEffect = 0;
+            if (camera.fov !== 60) {
+                camera.fov = 60;
+                camera.updateProjectionMatrix();
+            }
             nearMissBannerTimer = 0;
             activeScrapeIntensity = 0;
             resetInputs();
-            stopPoliceVoice();
             resetPlayerPosition();
             prevLapTrackProgress = playerTrackProgress;
             clearSkidmarks();
@@ -1415,6 +2065,7 @@
             if (pauseMenu) pauseMenu.hidden = true;
             const pauseButton = document.getElementById('pause-game');
             if (pauseButton) pauseButton.setAttribute('aria-pressed', 'false');
+            window.gameMusicPlayer?.resumeFromGamePause?.();
             isCameraDragging = false;
             carSpeed = 0;
             yawRate = 0;
@@ -1439,6 +2090,8 @@
             policeBustedTimer = 5;
             policeThreatLevel = 0;
             policeToastTimer = 0;
+            policeEscalationElapsed = 0;
+            policeRamPenaltyCooldown = 0;
             damageAccelHits = 0;
             damageTopSpeedHits = 0;
             damageHandlingHits = 0;
@@ -1462,7 +2115,6 @@
             clearSkidmarks();
 
             updateGameAudio(0, 1000, 6000, 0, false, false, selectedVehicleType, false);
-            stopPoliceVoice();
 
             if (playerCar) {
                 scene.remove(playerCar);
@@ -1470,6 +2122,13 @@
             }
             playerWheelPivots = [];
             clearTrafficCars();
+            resetDynamicNightLighting();
+            currentCameraFov = 60;
+            currentTunnelEffect = 0;
+            if (camera.fov !== 60) {
+                camera.fov = 60;
+                camera.updateProjectionMatrix();
+            }
 
             const toast = document.getElementById('near-miss-toast');
             if (toast) toast.hidden = true;
